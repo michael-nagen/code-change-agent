@@ -128,6 +128,55 @@ export const ARTIFACT_METADATA: readonly ArtifactMeta[] = [
     flag: 'includeDailyUpdate',
     requiredDependencies: ['flowArtifact', 'gapReport', 'prDescription'],
   },
+  {
+    key: 'dailyWorkGuidance',
+    label: 'Daily Work Guidance',
+    group: 'actions',
+    description:
+      'How to work today: yesterday vs the spec, blockers, decisions, and an approvable plan.',
+    isBaseArtifact: false,
+    isGeneratedOnDemand: true,
+    isEditable: false,
+    copyLabel: 'Daily Work Guidance',
+    flag: 'includeDailyWorkGuidance',
+    requiredDependencies: ['flowArtifact', 'gapReport'],
+  },
+  {
+    key: 'technicalChangeBrief',
+    label: 'Technical Change Brief',
+    group: 'actions',
+    description:
+      'A technical explanation of what changed — schema, models, APIs, workflow, UI, and talking points.',
+    isBaseArtifact: false,
+    isGeneratedOnDemand: true,
+    isEditable: false,
+    copyLabel: 'Technical Change Brief',
+    flag: 'includeTechnicalChangeBrief',
+  },
+  {
+    key: 'demoPrepLoop',
+    label: 'Demo Prep Loop',
+    group: 'actions',
+    description:
+      'A demo and presentation plan: story, walkthrough order, screenshots, deck, script, and pitch — all pending your approval.',
+    isBaseArtifact: false,
+    isGeneratedOnDemand: true,
+    isEditable: false,
+    copyLabel: 'Demo Prep Loop',
+    flag: 'includeDemoPrepLoop',
+  },
+  {
+    key: 'weeklyReview',
+    label: 'Weekly Review',
+    group: 'actions',
+    description:
+      'The weekly synthesis: progress vs spec, technical changes, decisions, the demo/video story, and next week.',
+    isBaseArtifact: false,
+    isGeneratedOnDemand: true,
+    isEditable: false,
+    copyLabel: 'Weekly Review',
+    flag: 'includeWeeklyReview',
+  },
 ];
 
 /** Help text for the non-artifact Overview view. */

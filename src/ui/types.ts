@@ -22,6 +22,10 @@ export interface AnalysisIncludeSelection {
   includePrDescription: boolean;
   includeVideoScript: boolean;
   includeDailyUpdate: boolean;
+  includeDailyWorkGuidance: boolean;
+  includeTechnicalChangeBrief: boolean;
+  includeDemoPrepLoop: boolean;
+  includeWeeklyReview: boolean;
 }
 
 /**
@@ -70,6 +74,10 @@ export interface AnalysisRequest extends AnalysisIncludeSelection {
   sessionId?: string;
   requirementText: string;
   rawDiff: string;
+  /** Memory owner id (defaults server-side). Used to load durable memory. */
+  userId?: string;
+  /** Stable memory project key (derived from the project name), if any. */
+  projectId?: string;
 }
 
 /** The two values every input mode must resolve to before analysis. */
@@ -111,6 +119,16 @@ export interface WorkspaceCard {
   html: string;
   /** Plain text to copy (only set where copy is offered, e.g. PR Draft). */
   copyText?: string;
+  /**
+   * Extra labeled copy targets beyond the primary `copyText` (e.g. "Notion
+   * daily" or a per-step Cursor prompt). Each renders its own copy button.
+   */
+  copyActions?: { label: string; text: string }[];
+  /**
+   * A downloadable file built from the artifact (e.g. the Markdown deck).
+   * Renders a download button that saves `text` as `filename`.
+   */
+  downloadAction?: { label: string; filename: string; text: string };
 }
 
 /**
@@ -180,5 +198,20 @@ export type UndoArtifactEditResponse =
     }
   | {
       status: 'error';
+      message: string;
+    };
+
+/** The response returned by the save-memory handler to the client. */
+export type SaveMemoryResponse =
+  | {
+      status: 'success';
+      /** A short, user-facing confirmation. */
+      message: string;
+      /** The date of the snapshot that was persisted. */
+      savedDate: string;
+    }
+  | {
+      status: 'error';
+      /** The actual error message, shown verbatim in the UI. */
       message: string;
     };

@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AnalysisHarness } from '../AnalysisHarness.js';
+import { InMemoryMemoryStore } from '../../memory/index.js';
+import { HarnessError } from '../../errors/HarnessError.js';
 import { InMemoryArtifactStore } from '../InMemoryArtifactStore.js';
 import { ANALYZE_CODE_CHANGE_WORKFLOW } from '../workflowDefinition.js';
 import type { AnalysisSession } from '../types/index.js';
@@ -40,6 +42,26 @@ import type {
   DailyUpdateInput,
   DailyUpdateSkill,
 } from '../../skills/dailyUpdate/index.js';
+import type {
+  DailyWorkGuidance,
+  DailyWorkGuidanceInput,
+  DailyWorkGuidanceSkill,
+} from '../../skills/dailyWorkGuidance/index.js';
+import type {
+  TechnicalChangeBrief,
+  TechnicalChangeBriefInput,
+  TechnicalChangeBriefSkill,
+} from '../../skills/technicalChangeBrief/index.js';
+import type {
+  DemoPrepLoop,
+  DemoPrepLoopInput,
+  DemoPrepLoopSkill,
+} from '../../skills/demoPrepLoop/index.js';
+import type {
+  WeeklyReview,
+  WeeklyReviewInput,
+  WeeklyReviewSkill,
+} from '../../skills/weeklyReview/index.js';
 import type { GitInputAdapter, GitInputAdapterInput } from '../../tools/index.js';
 
 const CHANGE_EXPLANATION: ChangeExplanation = {
@@ -113,6 +135,299 @@ const DAILY_UPDATE: DailyUpdate = {
   spokenVersion: 'Yesterday I built planning. Today I will open the PR.',
 };
 
+const DAILY_WORK_GUIDANCE: DailyWorkGuidance = {
+  yesterdaySummary: 'Implemented the planning stage before execution.',
+  progressVsSpec: [
+    {
+      item: 'Add a planning stage before execution',
+      whatChanged: 'The planning stage was implemented.',
+      newStatus: 'done',
+      evidence: 'The requirement alignment lists the planning stage as satisfied.',
+      confidence: 'high',
+    },
+  ],
+  advancedChecklistItems: [
+    {
+      item: 'Add a planning stage before execution',
+      previousStatus: 'missing',
+      newStatus: 'done',
+      whatAdvanced: 'The planning stage went from missing to implemented.',
+      evidence: 'The change explanation describes the new planning stage.',
+    },
+  ],
+  blockersAndRisks: [],
+  decisionsNeedingApproval: [],
+  plannedSteps: [
+    {
+      id: 'step-1',
+      title: 'Open the PR',
+      whyItMatters: 'The change is ready to review.',
+      expectedOutput: 'A PR is opened.',
+      cursorPrompt: 'Draft a PR for the planning stage.',
+      validationChecklist: ['The PR builds and tests pass.'],
+      status: 'pending_approval',
+    },
+  ],
+  notionDailyUpdate: {
+    yesterday: 'Built the planning stage.',
+    today: 'Open the PR.',
+    blockers: 'None.',
+    decisionsNeeded: 'None.',
+    progressVsSpec: 'Planning stage done.',
+    nextCursorPrompt: 'Draft a PR for the planning stage.',
+  },
+  memoryUpdate: {
+    date: '2026-07-07',
+    dailySummary: 'Planning stage done; ready to open a PR.',
+    updatedChecklistStatuses: [
+      { item: 'Add a planning stage before execution', status: 'done' },
+    ],
+    newDecisions: [],
+    openBlockers: [],
+    nextActions: ['Open the PR'],
+  },
+};
+
+const TECHNICAL_CHANGE_BRIEF: TechnicalChangeBrief = {
+  executiveSummary: 'Adds a planning stage before execution.',
+  dataSchemaChanges: {
+    hasChanges: false,
+    summary: 'No data or schema changes.',
+    newFields: [],
+    changedFields: [],
+    removedFields: [],
+    newSchemas: [],
+    changedParserContracts: [],
+    newStatusValues: [],
+    persistedDataImpact: 'No persisted data affected.',
+    backwardCompatibility: 'compatible',
+    backwardCompatibilityNote: 'Additive only.',
+  },
+  modelsAndTypes: [
+    {
+      name: 'Planner',
+      filePath: 'src/planner.ts',
+      represents: 'The planning stage.',
+      whyNeeded: 'To plan before executing.',
+      importantFields: ['steps: the planned steps'],
+      evidence: 'confirmed',
+    },
+  ],
+  inputsApiFlags: [],
+  workflowRuntimeChanges: {
+    summary: 'A planning stage runs before execution.',
+    whereItRuns: 'Before execution.',
+    dependsOn: ['Input'],
+    consumesArtifacts: ['None'],
+    producesArtifact: 'A plan',
+    cachedOrReused: 'Not cached.',
+    behaviorWhenFlagOff: 'Execution runs without a plan.',
+  },
+  uiChanges: {
+    hasChanges: false,
+    summary: 'No UI changes.',
+    newCardsOrViews: [],
+    togglesOrButtons: [],
+    copyActions: [],
+    sectionsDisplayed: [],
+    howToActivate: 'not visible from the provided diff/analysis',
+  },
+  interestingFunctionality: [
+    {
+      title: 'Planning stage',
+      whatItDoes: 'Builds a plan.',
+      whyItMatters: 'Separates planning from execution.',
+      howItWorks: 'Reads inputs and emits ordered steps.',
+      filesInvolved: ['src/planner.ts'],
+    },
+  ],
+  howItWorksStepByStep: [
+    { actor: 'User', action: 'Provides input.' },
+    { action: 'Planner builds a plan.', detail: 'Ordered steps.' },
+  ],
+  filesWorthShowing: [
+    {
+      path: 'src/planner.ts',
+      whyItMatters: 'It holds the planning logic.',
+      whatToPointOut: 'The plan-building function.',
+    },
+  ],
+  talkingPoints: ['We added a planning stage before execution.'],
+};
+
+const DEMO_PREP_LOOP: DemoPrepLoop = {
+  loopStatus: {
+    currentStage: 'Initial demo plan proposed.',
+    overallStatus: 'pending_user_review',
+    nextRecommendedAction: 'Review the walkthrough order.',
+    whatNeedsUserApproval: ['Demo story'],
+  },
+  demoStoryProposal: {
+    problem: 'Execution ran without a plan.',
+    solution: 'A planning stage before execution.',
+    technicalChange: 'A Planner builds ordered steps first.',
+    userOrProductValue: 'Predictable execution.',
+    proofOrDemoMoment: 'A run shows the plan before execution.',
+    limitationsOrNextSteps: 'Plans are not persisted.',
+    status: 'pending_approval',
+  },
+  walkthroughOrder: [
+    {
+      order: 1,
+      title: 'The Planner',
+      filePath: 'src/planner.ts',
+      type: 'code',
+      whyThisComesHere: 'The planning logic anchors the story.',
+      whatToShow: 'The plan-building function.',
+      whatToSay: 'Planning is separated from execution.',
+      whatToSkip: 'Helper utilities.',
+      relatedFeatureOrConcept: 'Planning stage',
+      estimatedTimeSeconds: 45,
+      mustShow: true,
+      evidence: 'confirmed',
+      status: 'pending_approval',
+    },
+  ],
+  codeEvidencePlan: [
+    {
+      filePath: 'src/planner.ts',
+      evidenceType: 'workflow',
+      whatItProves: 'Planning runs before execution.',
+      whyItMatters: 'It is the core of the change.',
+      confidence: 'high',
+      evidence: 'confirmed',
+      status: 'pending_approval',
+    },
+  ],
+  screenshotPlan: [
+    {
+      id: 'shot-1',
+      title: 'Planner code',
+      type: 'code',
+      filePath: 'src/planner.ts',
+      whatToCapture: 'The plan-building function.',
+      whyThisMatters: 'It proves the planning stage exists.',
+      whatToSay: 'This is where the plan is built.',
+      whatToSkip: 'Imports.',
+      relatedFeatureOrConcept: 'Planning stage',
+      estimatedTimeSeconds: 30,
+      mustShow: true,
+      suggestedCaption: 'The Planner builds ordered steps.',
+      evidence: 'confirmed',
+      status: 'pending_approval',
+    },
+  ],
+  approvalQuestions: [
+    {
+      question: 'Focus on the planner or the execution flow?',
+      whyItMatters: 'It decides which slides carry the story.',
+      options: ['Planner', 'Execution flow'],
+      status: 'pending_approval',
+    },
+  ],
+  deckPlan: [
+    {
+      slideNumber: 1,
+      title: 'Planning before execution',
+      purpose: 'Introduce the change.',
+      visualType: 'code_screenshot',
+      screenshotIds: ['shot-1'],
+      whatToShow: 'The Planner screenshot.',
+      onSlideText: ['Plan first', 'Then execute'],
+      speakerNotes: 'Explain why planning was separated.',
+      narrationScript: 'We now build a plan before executing.',
+      transitionToNextSlide: 'Here is how it runs.',
+      estimatedTimeSeconds: 40,
+      mustHave: true,
+      status: 'draft',
+    },
+  ],
+  draftVideoScript: {
+    title: 'Planning before execution',
+    estimatedDuration: '5-7 minutes',
+    sections: [
+      {
+        kind: 'opening',
+        title: 'Intro',
+        narration: 'This walkthrough covers the new planning stage.',
+        visualCue: 'Title slide.',
+        estimatedTimeSeconds: 30,
+      },
+    ],
+  },
+  finalShortPitch: 'We added a planning stage so execution is predictable.',
+  readinessChecklist: [
+    { item: 'Run tests', why: 'Prove the change is green.', done: false },
+  ],
+};
+
+const WEEKLY_REVIEW: WeeklyReview = {
+  status: {
+    status: 'draft',
+    confidence: 'medium',
+    missingInputs: [],
+    reviewPeriodLabel: 'Week ending 2026-07-07',
+    generatedAt: '2026-07-07T09:00:00.000Z',
+  },
+  executiveSummary: 'Built the planning stage; ready to open the PR.',
+  progressAgainstSpec: [
+    {
+      title: 'Add a planning stage before execution',
+      status: 'done',
+      evidence: 'Alignment lists it satisfied.',
+      notes: 'No conflict with memory.',
+      source: 'current_run',
+    },
+  ],
+  whatChangedTechnically: {
+    schemaOrDataChanges: [],
+    modelOrTypeChanges: [],
+    workflowOrRuntimeChanges: [
+      { description: 'Planning runs before execution.', evidence: 'confirmed' },
+    ],
+    uiChanges: [],
+    toolsOrSkillsAdded: [],
+    importantFilesOrModules: ['src/planner.ts'],
+  },
+  keyDecisions: [
+    {
+      decision: 'Separate planning from execution.',
+      why: 'Clearer responsibilities.',
+      impact: 'Execution depends on planning.',
+      status: 'active',
+      source: 'current_run',
+    },
+  ],
+  blockersAndRisks: [],
+  demoVideoStory: {
+    strongestStory: 'Planning now happens before execution.',
+    whatToShow: ['The planner'],
+    whatToSay: ['Why planning is separated'],
+    whatToSkip: ['Boilerplate'],
+    recommendedStructure: [{ title: 'Intro', durationLabel: '~1 min', focus: 'The problem' }],
+    keyFilesOrScreens: ['src/planner.ts'],
+    strongestProductSentence: 'Plans are first-class before execution.',
+  },
+  reviewTalkingPoints: ['I built the planning stage.'],
+  suggestedWeeklyUpdate: {
+    thisWeek: 'Built planning.',
+    technicalProgress: 'Planner added.',
+    demoProductProgress: 'Can demo planning.',
+    blockers: 'None.',
+    nextWeek: 'Open the PR.',
+  },
+  nextWeekPlan: ['Open the PR.'],
+  memoryUpdateProposal: {
+    latestWeeklySummary: 'Planning stage done; ready to open PR.',
+    updatedChecklistStatuses: [{ item: 'Add a planning stage before execution', status: 'done' }],
+    newDecisions: ['Separate planning from execution.'],
+    updatedBlockers: [],
+    nextActions: ['Open the PR'],
+    demoStorySummary: 'Planning before execution.',
+    filesWorthShowing: ['src/planner.ts'],
+  },
+};
+
 /**
  * Records call order and counts, and returns fixed artifacts. Crucially, these
  * fakes use no LanguageModel — proving the Harness is independent of any model
@@ -128,6 +443,10 @@ function makeSpies() {
     prDescription: 0,
     videoScript: 0,
     dailyUpdate: 0,
+    dailyWorkGuidance: 0,
+    technicalChangeBrief: 0,
+    demoPrepLoop: 0,
+    weeklyReview: 0,
   };
   let lastAlignmentInput: RequirementAlignmentInput | undefined;
   let lastGapReportInput: GapReportInput | undefined;
@@ -135,6 +454,10 @@ function makeSpies() {
   let lastPrInput: PRDescriptionInput | undefined;
   let lastVideoScriptInput: VideoScriptInput | undefined;
   let lastDailyUpdateInput: DailyUpdateInput | undefined;
+  let lastDailyWorkGuidanceInput: DailyWorkGuidanceInput | undefined;
+  let lastTechnicalChangeBriefInput: TechnicalChangeBriefInput | undefined;
+  let lastDemoPrepLoopInput: DemoPrepLoopInput | undefined;
+  let lastWeeklyReviewInput: WeeklyReviewInput | undefined;
 
   const changeExplanation: ChangeExplanationSkill = {
     name: 'spy-change-explanation',
@@ -205,6 +528,46 @@ function makeSpies() {
     },
   };
 
+  const dailyWorkGuidance: DailyWorkGuidanceSkill = {
+    name: 'spy-daily-work-guidance',
+    async execute(input: DailyWorkGuidanceInput): Promise<DailyWorkGuidance> {
+      counts.dailyWorkGuidance += 1;
+      lastDailyWorkGuidanceInput = input;
+      order.push('dailyWorkGuidance');
+      return structuredClone(DAILY_WORK_GUIDANCE);
+    },
+  };
+
+  const technicalChangeBrief: TechnicalChangeBriefSkill = {
+    name: 'spy-technical-change-brief',
+    async execute(input: TechnicalChangeBriefInput): Promise<TechnicalChangeBrief> {
+      counts.technicalChangeBrief += 1;
+      lastTechnicalChangeBriefInput = input;
+      order.push('technicalChangeBrief');
+      return structuredClone(TECHNICAL_CHANGE_BRIEF);
+    },
+  };
+
+  const demoPrepLoop: DemoPrepLoopSkill = {
+    name: 'spy-demo-prep-loop',
+    async execute(input: DemoPrepLoopInput): Promise<DemoPrepLoop> {
+      counts.demoPrepLoop += 1;
+      lastDemoPrepLoopInput = input;
+      order.push('demoPrepLoop');
+      return structuredClone(DEMO_PREP_LOOP);
+    },
+  };
+
+  const weeklyReview: WeeklyReviewSkill = {
+    name: 'spy-weekly-review',
+    async execute(input: WeeklyReviewInput): Promise<WeeklyReview> {
+      counts.weeklyReview += 1;
+      lastWeeklyReviewInput = input;
+      order.push('weeklyReview');
+      return structuredClone(WEEKLY_REVIEW);
+    },
+  };
+
   return {
     order,
     counts,
@@ -215,12 +578,20 @@ function makeSpies() {
     prDescription,
     videoScript,
     dailyUpdate,
+    dailyWorkGuidance,
+    technicalChangeBrief,
+    demoPrepLoop,
+    weeklyReview,
     getLastAlignmentInput: () => lastAlignmentInput,
     getLastGapReportInput: () => lastGapReportInput,
     getLastFlowInput: () => lastFlowInput,
     getLastPrInput: () => lastPrInput,
     getLastVideoScriptInput: () => lastVideoScriptInput,
     getLastDailyUpdateInput: () => lastDailyUpdateInput,
+    getLastDailyWorkGuidanceInput: () => lastDailyWorkGuidanceInput,
+    getLastTechnicalChangeBriefInput: () => lastTechnicalChangeBriefInput,
+    getLastDemoPrepLoopInput: () => lastDemoPrepLoopInput,
+    getLastWeeklyReviewInput: () => lastWeeklyReviewInput,
   };
 }
 
@@ -305,6 +676,135 @@ test('reuses existing artifacts and does not call skills again on re-run', async
   assert.equal(second.sessionId, first.sessionId);
   assert.equal(spies.counts.changeExplanation, 1);
   assert.equal(spies.counts.requirementAlignment, 1);
+});
+
+test('reuses the session when the same sessionId is given the same inputs', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+  });
+
+  const first = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    // Trailing whitespace differs but normalizes to the same requirement, so it
+    // must still count as the same inputs (normalized identity, not raw text).
+    requirementText: 'Add a planning stage before execution.',
+  });
+
+  const second = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: '  Add a planning stage before execution.  ',
+    sessionId: first.sessionId,
+  });
+
+  assert.equal(second.sessionId, first.sessionId);
+  assert.equal(spies.counts.changeExplanation, 1);
+  assert.equal(spies.counts.requirementAlignment, 1);
+  assert.deepEqual(second.changeExplanation, first.changeExplanation);
+});
+
+test('fails closed when a reused sessionId is given a different raw diff', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+  });
+
+  const first = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+  });
+
+  await assert.rejects(
+    () =>
+      harness.runAnalysis({
+        rawDiff: 'diff --git a DIFFERENT',
+        requirementText: 'Add a planning stage before execution.',
+        sessionId: first.sessionId,
+      }),
+    (err: unknown) =>
+      err instanceof HarnessError &&
+      err.code === 'SESSION_INPUT_MISMATCH' &&
+      /different code diff/.test(err.message),
+  );
+
+  // No skills re-run for the mismatched request (the guard rejects first).
+  assert.equal(spies.counts.changeExplanation, 1);
+  assert.equal(spies.counts.requirementAlignment, 1);
+});
+
+test('fails closed when a reused sessionId is given different requirement text', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+  });
+
+  const first = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+  });
+
+  await assert.rejects(
+    () =>
+      harness.runAnalysis({
+        rawDiff: 'diff --git a b',
+        requirementText: 'Completely different requirement.',
+        sessionId: first.sessionId,
+      }),
+    (err: unknown) =>
+      err instanceof HarnessError &&
+      err.code === 'SESSION_INPUT_MISMATCH' &&
+      /different requirement/.test(err.message),
+  );
+
+  assert.equal(spies.counts.changeExplanation, 1);
+  assert.equal(spies.counts.requirementAlignment, 1);
+});
+
+test('does not return stale artifacts on input mismatch — the stored session is untouched', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+  });
+
+  const first = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+  });
+  const before = harness.getSession(first.sessionId);
+  assert.ok(before);
+
+  await assert.rejects(
+    () =>
+      harness.runAnalysis({
+        rawDiff: 'diff --git a DIFFERENT',
+        requirementText: 'A different requirement entirely.',
+        sessionId: first.sessionId,
+      }),
+    /SESSION_INPUT_MISMATCH|different code diff|different requirement/,
+  );
+
+  // The mismatch produced no result to render; the original session is intact
+  // and still describes the ORIGINAL inputs (never overwritten with new ones).
+  const after = harness.getSession(first.sessionId);
+  assert.ok(after);
+  assert.equal(after.inputs.rawDiff, 'diff --git a b');
+  assert.deepEqual(after.inputs.requirementInput, {
+    requirementText: 'Add a planning stage before execution.',
+    source: 'manual',
+  });
+  assert.deepEqual(after.artifacts.changeExplanation, CHANGE_EXPLANATION);
 });
 
 test('does not call a skill when its artifact already exists in the session', async () => {
@@ -774,6 +1274,510 @@ test('the daily update skill receives the five artifacts, never the raw diff', a
   assert.equal('rawDiff' in dailyInput, false);
 });
 
+test('does not generate daily work guidance by default', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    dailyWorkGuidance: spies.dailyWorkGuidance,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+  });
+
+  assert.equal(spies.counts.dailyWorkGuidance, 0);
+  assert.equal(result.dailyWorkGuidance, undefined);
+});
+
+test('stores daily work guidance as a session artifact and in the result when requested', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    dailyWorkGuidance: spies.dailyWorkGuidance,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeDailyWorkGuidance: true,
+  });
+
+  assert.deepEqual(result.dailyWorkGuidance, DAILY_WORK_GUIDANCE);
+
+  const session = harness.getSession(result.sessionId);
+  assert.ok(session);
+  assert.deepEqual(session.artifacts.dailyWorkGuidance, DAILY_WORK_GUIDANCE);
+});
+
+test('daily work guidance receives the spec, optional memory/goal, and artifacts, never the raw diff', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    dailyWorkGuidance: spies.dailyWorkGuidance,
+  });
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    previousProgressMemory: 'Yesterday: scaffolding only.',
+    todayGoal: 'Finish the planning stage today.',
+    includeDailyWorkGuidance: true,
+  });
+
+  const guidanceInput = spies.getLastDailyWorkGuidanceInput();
+  assert.ok(guidanceInput);
+  assert.deepEqual(Object.keys(guidanceInput).sort(), [
+    'changeExplanation',
+    'date',
+    'flowArtifact',
+    'gapReport',
+    'previousProgressMemory',
+    'requirementAlignment',
+    'specOrChecklist',
+    'todayGoal',
+  ]);
+  assert.equal(guidanceInput.specOrChecklist, 'Add a planning stage before execution.');
+  assert.match(guidanceInput.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(guidanceInput.previousProgressMemory, 'Yesterday: scaffolding only.');
+  assert.equal(guidanceInput.todayGoal, 'Finish the planning stage today.');
+  assert.equal('rawDiff' in guidanceInput, false);
+});
+
+test('daily work guidance omits optional memory/goal when they are not provided', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    dailyWorkGuidance: spies.dailyWorkGuidance,
+  });
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeDailyWorkGuidance: true,
+  });
+
+  const guidanceInput = spies.getLastDailyWorkGuidanceInput();
+  assert.ok(guidanceInput);
+  assert.equal('previousProgressMemory' in guidanceInput, false);
+  assert.equal('todayGoal' in guidanceInput, false);
+});
+
+test('does not generate a technical change brief by default', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    technicalChangeBrief: spies.technicalChangeBrief,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+  });
+
+  assert.equal(spies.counts.technicalChangeBrief, 0);
+  assert.equal(result.technicalChangeBrief, undefined);
+});
+
+test('stores the technical change brief as a session artifact and in the result when requested', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    technicalChangeBrief: spies.technicalChangeBrief,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeTechnicalChangeBrief: true,
+  });
+
+  assert.deepEqual(result.technicalChangeBrief, TECHNICAL_CHANGE_BRIEF);
+
+  const session = harness.getSession(result.sessionId);
+  assert.ok(session);
+  assert.deepEqual(session.artifacts.technicalChangeBrief, TECHNICAL_CHANGE_BRIEF);
+});
+
+test('the technical change brief skill receives the raw diff, requirement, and available artifacts', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    technicalChangeBrief: spies.technicalChangeBrief,
+  });
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeTechnicalChangeBrief: true,
+  });
+
+  const briefInput = spies.getLastTechnicalChangeBriefInput();
+  assert.ok(briefInput);
+  // Unlike the downstream skills, this one DOES receive the raw diff.
+  assert.equal(briefInput.rawDiff, 'diff --git a b');
+  assert.equal(briefInput.requirementText, 'Add a planning stage before execution.');
+  assert.deepEqual(briefInput.changeExplanation, CHANGE_EXPLANATION);
+  assert.deepEqual(briefInput.requirementAlignment, REQUIREMENT_ALIGNMENT);
+  // Flow and gap report ran by default, so they are passed opportunistically.
+  assert.deepEqual(briefInput.gapReport, GAP_REPORT);
+  assert.deepEqual(briefInput.flowArtifact, FLOW_ARTIFACT);
+});
+
+test('the technical change brief runs with just the base analysis (flow and gap disabled)', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    technicalChangeBrief: spies.technicalChangeBrief,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeFlow: false,
+    includeGapReport: false,
+    includeTechnicalChangeBrief: true,
+  });
+
+  assert.equal(spies.counts.technicalChangeBrief, 1);
+  assert.deepEqual(result.technicalChangeBrief, TECHNICAL_CHANGE_BRIEF);
+
+  const briefInput = spies.getLastTechnicalChangeBriefInput();
+  assert.ok(briefInput);
+  assert.equal('gapReport' in briefInput, false);
+  assert.equal('flowArtifact' in briefInput, false);
+});
+
+test('reuses an existing technical change brief and does not call the skill again', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    technicalChangeBrief: spies.technicalChangeBrief,
+  });
+
+  const first = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeTechnicalChangeBrief: true,
+  });
+  assert.equal(spies.counts.technicalChangeBrief, 1);
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    sessionId: first.sessionId,
+    includeTechnicalChangeBrief: true,
+  });
+  assert.equal(spies.counts.technicalChangeBrief, 1);
+});
+
+test('does not generate a demo prep loop by default', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    demoPrepLoop: spies.demoPrepLoop,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+  });
+
+  assert.equal(spies.counts.demoPrepLoop, 0);
+  assert.equal(result.demoPrepLoop, undefined);
+});
+
+test('stores the demo prep loop as a session artifact and in the result when requested', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    demoPrepLoop: spies.demoPrepLoop,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeDemoPrepLoop: true,
+  });
+
+  assert.deepEqual(result.demoPrepLoop, DEMO_PREP_LOOP);
+
+  const session = harness.getSession(result.sessionId);
+  assert.ok(session);
+  assert.deepEqual(session.artifacts.demoPrepLoop, DEMO_PREP_LOOP);
+});
+
+test('the demo prep loop skill receives the raw diff, requirement, and available artifacts', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    technicalChangeBrief: spies.technicalChangeBrief,
+    demoPrepLoop: spies.demoPrepLoop,
+  });
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeTechnicalChangeBrief: true,
+    includeDemoPrepLoop: true,
+  });
+
+  const loopInput = spies.getLastDemoPrepLoopInput();
+  assert.ok(loopInput);
+  // Like the technical change brief, this one DOES receive the raw diff.
+  assert.equal(loopInput.rawDiff, 'diff --git a b');
+  assert.equal(loopInput.requirementText, 'Add a planning stage before execution.');
+  assert.deepEqual(loopInput.changeExplanation, CHANGE_EXPLANATION);
+  assert.deepEqual(loopInput.requirementAlignment, REQUIREMENT_ALIGNMENT);
+  // Flow, gap report, and the technical change brief ran, so they are passed
+  // opportunistically — the brief in particular seeds the demo plan.
+  assert.deepEqual(loopInput.gapReport, GAP_REPORT);
+  assert.deepEqual(loopInput.flowArtifact, FLOW_ARTIFACT);
+  assert.deepEqual(loopInput.technicalChangeBrief, TECHNICAL_CHANGE_BRIEF);
+});
+
+test('the demo prep loop runs with just the base analysis (flow and gap disabled)', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    demoPrepLoop: spies.demoPrepLoop,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeFlow: false,
+    includeGapReport: false,
+    includeDemoPrepLoop: true,
+  });
+
+  assert.equal(spies.counts.demoPrepLoop, 1);
+  assert.deepEqual(result.demoPrepLoop, DEMO_PREP_LOOP);
+
+  const loopInput = spies.getLastDemoPrepLoopInput();
+  assert.ok(loopInput);
+  assert.equal('gapReport' in loopInput, false);
+  assert.equal('flowArtifact' in loopInput, false);
+  assert.equal('dailyWorkGuidance' in loopInput, false);
+  assert.equal('technicalChangeBrief' in loopInput, false);
+  assert.equal('videoScript' in loopInput, false);
+});
+
+test('reuses an existing demo prep loop and does not call the skill again', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    demoPrepLoop: spies.demoPrepLoop,
+  });
+
+  const first = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeDemoPrepLoop: true,
+  });
+  assert.equal(spies.counts.demoPrepLoop, 1);
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    sessionId: first.sessionId,
+    includeDemoPrepLoop: true,
+  });
+  assert.equal(spies.counts.demoPrepLoop, 1);
+});
+
+test('does not generate a weekly review by default', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    weeklyReview: spies.weeklyReview,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+  });
+
+  assert.equal(spies.counts.weeklyReview, 0);
+  assert.equal(result.weeklyReview, undefined);
+});
+
+test('stores the weekly review as a session artifact and in the result when requested', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    weeklyReview: spies.weeklyReview,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeWeeklyReview: true,
+  });
+
+  assert.deepEqual(result.weeklyReview, WEEKLY_REVIEW);
+  const session = harness.getSession(result.sessionId);
+  assert.ok(session);
+  assert.deepEqual(session.artifacts.weeklyReview, WEEKLY_REVIEW);
+});
+
+test('the weekly review consumes available daily/technical/demo artifacts and memory', async () => {
+  const spies = makeSpies();
+  const memoryStore = new InMemoryMemoryStore();
+  await memoryStore.saveProjectMemory({
+    userId: 'local',
+    projectId: 'demo',
+    memory: {
+      schemaVersion: 1,
+      userId: 'local',
+      projectId: 'demo',
+      latestSnapshot: {
+        date: '2026-06-30',
+        dailySummary: 'Last week: scaffolding only.',
+        updatedChecklistStatuses: [],
+        openBlockers: [],
+        openDecisions: [],
+        nextActions: [],
+      },
+      history: [],
+      updatedAt: '2026-06-30T00:00:00.000Z',
+    },
+  });
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    dailyWorkGuidance: spies.dailyWorkGuidance,
+    technicalChangeBrief: spies.technicalChangeBrief,
+    demoPrepLoop: spies.demoPrepLoop,
+    weeklyReview: spies.weeklyReview,
+    memoryStore,
+  });
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    projectId: 'demo',
+    includeDailyWorkGuidance: true,
+    includeTechnicalChangeBrief: true,
+    includeDemoPrepLoop: true,
+    includeWeeklyReview: true,
+  });
+
+  const input = spies.getLastWeeklyReviewInput();
+  assert.ok(input);
+  assert.equal(input.rawDiff, 'diff --git a b');
+  assert.deepEqual(input.technicalChangeBrief, TECHNICAL_CHANGE_BRIEF);
+  assert.deepEqual(input.demoPrepLoop, DEMO_PREP_LOOP);
+  assert.ok(input.dailyWorkGuidance);
+  assert.ok(input.previousProgressMemory);
+  assert.match(input.previousProgressMemory, /scaffolding only/);
+});
+
+test('the weekly review runs with just the base analysis (no daily/technical/demo)', async () => {
+  const spies = makeSpies();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    weeklyReview: spies.weeklyReview,
+  });
+
+  await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeFlow: false,
+    includeGapReport: false,
+    includeWeeklyReview: true,
+  });
+
+  const input = spies.getLastWeeklyReviewInput();
+  assert.ok(input);
+  assert.equal('dailyWorkGuidance' in input, false);
+  assert.equal('technicalChangeBrief' in input, false);
+  assert.equal('demoPrepLoop' in input, false);
+  assert.equal('gapReport' in input, false);
+});
+
+test('saveProjectMemoryFromWeeklyReview persists the weekly memory proposal', async () => {
+  const spies = makeSpies();
+  const memoryStore = new InMemoryMemoryStore();
+  const harness = new AnalysisHarness({
+    changeExplanation: spies.changeExplanation,
+    flowGeneration: spies.flowGeneration,
+    requirementAlignment: spies.requirementAlignment,
+    gapReport: spies.gapReport,
+    weeklyReview: spies.weeklyReview,
+    memoryStore,
+  });
+
+  const result = await harness.runAnalysis({
+    rawDiff: 'diff --git a b',
+    requirementText: 'Add a planning stage before execution.',
+    includeWeeklyReview: true,
+  });
+  assert.ok(result.weeklyReview);
+
+  await harness.saveProjectMemoryFromWeeklyReview({
+    projectId: 'demo',
+    weeklyReview: result.weeklyReview,
+  });
+
+  const stored = await harness.getProjectMemory({ projectId: 'demo' });
+  assert.ok(stored?.latestSnapshot);
+  assert.equal(stored.latestSnapshot.dailySummary, 'Planning stage done; ready to open PR.');
+});
+
 /** A fake GitInputAdapter that records its input and returns a fixed diff. */
 function makeGitSpy() {
   let lastInput: GitInputAdapterInput | undefined;
@@ -1192,6 +2196,10 @@ test('the workflow definition order matches the actual execution order', async (
     videoScript: spies.videoScript,
     prDescription: spies.prDescription,
     dailyUpdate: spies.dailyUpdate,
+    dailyWorkGuidance: spies.dailyWorkGuidance,
+    technicalChangeBrief: spies.technicalChangeBrief,
+    demoPrepLoop: spies.demoPrepLoop,
+    weeklyReview: spies.weeklyReview,
   });
 
   const result = await harness.runAnalysis({
@@ -1202,6 +2210,10 @@ test('the workflow definition order matches the actual execution order', async (
     includeVideoScript: true,
     includePrDescription: true,
     includeDailyUpdate: true,
+    includeDailyWorkGuidance: true,
+    includeTechnicalChangeBrief: true,
+    includeDemoPrepLoop: true,
+    includeWeeklyReview: true,
   });
 
   const session = harness.getSession(result.sessionId);

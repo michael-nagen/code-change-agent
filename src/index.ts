@@ -1,6 +1,3 @@
-export { CodeUnderstandingHarness } from './harness/CodeUnderstandingHarness.js';
-export type { StepOptions, GenerateParams } from './harness/CodeUnderstandingHarness.js';
-export { SessionStore } from './harness/SessionStore.js';
 export { HarnessError } from './errors/HarnessError.js';
 export type { HarnessErrorCode } from './errors/HarnessError.js';
 export { ToolError } from './errors/ToolError.js';
@@ -9,11 +6,10 @@ export { SkillError } from './errors/SkillError.js';
 export type { SkillErrorCode } from './errors/SkillError.js';
 export { ProjectStoreError } from './errors/ProjectStoreError.js';
 export type { ProjectStoreErrorCode } from './errors/ProjectStoreError.js';
-export { validateInputs } from './validation/validateInputs.js';
+export { MemoryStoreError } from './errors/MemoryStoreError.js';
+export type { MemoryStoreErrorCode } from './errors/MemoryStoreError.js';
 
 export {
-  MockChangeUnderstandingSkill,
-  MockReportGenerationSkill,
   MockLanguageModel,
   FakeLanguageModel,
 } from './skills/mocks/index.js';
@@ -78,6 +74,93 @@ export type {
   HighlightedTopic,
   DailyUpdateSkill,
 } from './skills/dailyUpdate/index.js';
+
+export { DefaultDailyWorkGuidanceSkill } from './skills/dailyWorkGuidance/index.js';
+export type {
+  DailyWorkGuidanceInput,
+  DailyWorkGuidance,
+  DailyWorkGuidanceSkill,
+  ProgressStatus,
+  Confidence,
+  ApprovalStatus,
+  ProgressItem,
+  AdvancedChecklistItem,
+  BlockerOrRisk,
+  DecisionNeedingApproval,
+  PlannedStep,
+  NotionDailyUpdate,
+  ChecklistStatusEntry,
+  MemoryUpdate,
+} from './skills/dailyWorkGuidance/index.js';
+
+export { DefaultTechnicalChangeBriefSkill } from './skills/technicalChangeBrief/index.js';
+export type {
+  TechnicalChangeBriefInput,
+  TechnicalChangeBrief,
+  TechnicalChangeBriefSkill,
+  EvidenceLevel,
+  BackwardCompatibility,
+  SchemaChangeItem,
+  DataSchemaChanges,
+  ModelOrType,
+  InputApiKind,
+  InputApiFlag,
+  WorkflowRuntimeChanges,
+  UiChanges,
+  InterestingFunctionality,
+  HowItWorksStep,
+  FileWorthShowing,
+} from './skills/technicalChangeBrief/index.js';
+
+export { DefaultWeeklyReviewSkill } from './skills/weeklyReview/index.js';
+export type {
+  WeeklyReviewInput,
+  WeeklyReview,
+  WeeklyReviewSkill,
+  WeeklyReviewStatus,
+  WeeklyReviewStatusValue,
+  ReviewSource,
+  SpecItemStatus,
+  SpecProgressItem,
+  TechnicalChangeItem,
+  WhatChangedTechnically,
+  DecisionStatus,
+  KeyDecision,
+  RiskStatus,
+  WeeklyBlockerOrRisk,
+  DemoSegment,
+  DemoVideoStory,
+  SuggestedWeeklyUpdate,
+  WeeklyChecklistStatus,
+  WeeklyMemoryUpdateProposal,
+} from './skills/weeklyReview/index.js';
+
+export { DefaultDemoPrepLoopSkill } from './skills/demoPrepLoop/index.js';
+export type {
+  DemoPrepLoopInput,
+  DemoPrepLoop,
+  DemoPrepLoopSkill,
+  PathEvidence,
+  DemoApprovalStatus,
+  SlideStatus,
+  OverallLoopStatus,
+  LoopStatus,
+  DemoStoryProposal,
+  WalkthroughStepType,
+  WalkthroughStep,
+  CodeEvidenceType,
+  EvidenceConfidence,
+  CodeEvidenceItem,
+  ScreenshotType,
+  ScreenshotPlanItem,
+  ApprovalQuestion,
+  SlideVisualType,
+  DeckSlide,
+  VideoScriptSectionKind,
+  DraftVideoScriptSection,
+  DraftVideoScript,
+  ReadinessChecklistItem,
+} from './skills/demoPrepLoop/index.js';
 
 export { DefaultArtifactEditSkill } from './skills/artifactEdit/index.js';
 export { MockArtifactEditSkill } from './skills/mocks/index.js';
@@ -149,6 +232,14 @@ export type {
   NotionPlugin,
 } from './tools/index.js';
 
+export { DefaultPresentationDeckBuilderTool, buildMarkdownDeck } from './tools/index.js';
+export type {
+  DeckMetadata,
+  MarkdownDeckInput,
+  MarkdownDeckResult,
+  PresentationDeckBuilderTool,
+} from './tools/index.js';
+
 export { InMemoryProjectStore } from './project/index.js';
 export type {
   Project,
@@ -164,16 +255,32 @@ export type {
   AttachSessionToProjectInput,
 } from './project/index.js';
 
+export {
+  InMemoryMemoryStore,
+  JsonFileMemoryStore,
+  resolveMemoryStore,
+  resolveUserId,
+  toMemoryId,
+  toMemoryProjectId,
+  buildDeveloperMemoryContext,
+  renderPreviousProgressMemory,
+  appendSnapshot,
+  validateUserPreferencesMemory,
+  validateProjectMemory,
+  MEMORY_SCHEMA_VERSION,
+  DEFAULT_MEMORY_DATA_DIR,
+  DEFAULT_USER_ID,
+} from './memory/index.js';
 export type {
-  SessionPhase,
-  SessionInputs,
-  ChangeUnderstanding,
-  SessionOutputs,
-  SessionState,
-  ChangeUnderstandingInput,
-  ChangeUnderstandingSkill,
-  OutputKey,
-  OutputGenerator,
-  ReportGenerationSkill,
-  HarnessSkills,
-} from './types/index.js';
+  MemoryStore,
+  MemoryStoreKind,
+  UserPreferencesMemory,
+  ProjectMemory,
+  ProjectProgressSnapshot,
+  DeveloperMemoryContext,
+  GetUserMemoryInput,
+  SaveUserMemoryInput,
+  GetProjectMemoryInput,
+  SaveProjectMemoryInput,
+  ClearProjectMemoryInput,
+} from './memory/index.js';

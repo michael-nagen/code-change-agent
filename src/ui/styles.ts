@@ -51,6 +51,8 @@ li { margin: 3px 0; }
 .badge-needs_changes { background: #fff4d6; color: #7a5a0f; }
 .badge-blocked { background: #fdeaec; color: #b42332; }
 .badge-unclear { background: #eef1f6; color: #5b6473; }
+.status-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: #eef1f6; color: #3a4151; }
+.status-tag-pending { background: #fff4d6; color: #7a5a0f; }
 /* master/detail */
 .layout { display: grid; grid-template-columns: 240px 1fr 340px; gap: 18px; align-items: start; }
 .nav { background: #fff; border: 1px solid #e6e9ef; border-radius: 14px; padding: 12px; position: sticky; top: 16px; box-shadow: 0 1px 3px rgba(16,24,40,.05); }

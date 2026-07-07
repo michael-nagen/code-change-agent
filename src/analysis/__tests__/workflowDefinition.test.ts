@@ -13,6 +13,10 @@ const ALL_ON: AnalysisIncludeFlags = {
   includeVideoScript: true,
   includePrDescription: true,
   includeDailyUpdate: true,
+  includeDailyWorkGuidance: true,
+  includeTechnicalChangeBrief: true,
+  includeDemoPrepLoop: true,
+  includeWeeklyReview: true,
 };
 
 const DEFAULTS: AnalysisIncludeFlags = {
@@ -21,6 +25,10 @@ const DEFAULTS: AnalysisIncludeFlags = {
   includeVideoScript: false,
   includePrDescription: false,
   includeDailyUpdate: false,
+  includeDailyWorkGuidance: false,
+  includeTechnicalChangeBrief: false,
+  includeDemoPrepLoop: false,
+  includeWeeklyReview: false,
 };
 
 function stepByName(name: string): WorkflowStepDefinition {
@@ -41,6 +49,10 @@ test('the workflow definition is declared in the expected execution order', () =
       'videoScript',
       'prDescription',
       'dailyUpdate',
+      'dailyWorkGuidance',
+      'technicalChangeBrief',
+      'demoPrepLoop',
+      'weeklyReview',
     ],
   );
 });
@@ -54,6 +66,10 @@ test('each step declares the artifact it produces (except normalizeRequirement)'
   assert.equal(stepByName('videoScript').artifactKey, 'videoScript');
   assert.equal(stepByName('prDescription').artifactKey, 'prDescription');
   assert.equal(stepByName('dailyUpdate').artifactKey, 'dailyUpdate');
+  assert.equal(stepByName('dailyWorkGuidance').artifactKey, 'dailyWorkGuidance');
+  assert.equal(stepByName('technicalChangeBrief').artifactKey, 'technicalChangeBrief');
+  assert.equal(stepByName('demoPrepLoop').artifactKey, 'demoPrepLoop');
+  assert.equal(stepByName('weeklyReview').artifactKey, 'weeklyReview');
 });
 
 test('dependencies and include flags are declared for flow/gap/video/pr/daily', () => {
@@ -87,6 +103,32 @@ test('dependencies and include flags are declared for flow/gap/video/pr/daily', 
     'flowGeneration',
   ]);
   assert.equal(stepByName('dailyUpdate').includeFlag, 'includeDailyUpdate');
+
+  assert.deepEqual(stepByName('dailyWorkGuidance').dependsOn, [
+    'changeExplanation',
+    'requirementAlignment',
+    'gapReport',
+    'flowGeneration',
+  ]);
+  assert.equal(stepByName('dailyWorkGuidance').includeFlag, 'includeDailyWorkGuidance');
+
+  assert.deepEqual(stepByName('technicalChangeBrief').dependsOn, [
+    'changeExplanation',
+    'requirementAlignment',
+  ]);
+  assert.equal(stepByName('technicalChangeBrief').includeFlag, 'includeTechnicalChangeBrief');
+
+  assert.deepEqual(stepByName('demoPrepLoop').dependsOn, [
+    'changeExplanation',
+    'requirementAlignment',
+  ]);
+  assert.equal(stepByName('demoPrepLoop').includeFlag, 'includeDemoPrepLoop');
+
+  assert.deepEqual(stepByName('weeklyReview').dependsOn, [
+    'changeExplanation',
+    'requirementAlignment',
+  ]);
+  assert.equal(stepByName('weeklyReview').includeFlag, 'includeWeeklyReview');
 });
 
 test('required steps declare no include flag', () => {
@@ -111,6 +153,46 @@ test('valid include combinations pass validation', () => {
       includeDailyUpdate: true,
     }),
   );
+  assert.doesNotThrow(() =>
+    assertWorkflowIncludeFlags({ ...DEFAULTS, includeDailyWorkGuidance: true }),
+  );
+  assert.doesNotThrow(() =>
+    assertWorkflowIncludeFlags({ ...DEFAULTS, includeTechnicalChangeBrief: true }),
+  );
+  // The technical change brief depends only on the required base analysis, so it
+  // stays valid even when the optional flow and gap-report steps are disabled.
+  assert.doesNotThrow(() =>
+    assertWorkflowIncludeFlags({
+      ...DEFAULTS,
+      includeFlow: false,
+      includeGapReport: false,
+      includeTechnicalChangeBrief: true,
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertWorkflowIncludeFlags({ ...DEFAULTS, includeDemoPrepLoop: true }),
+  );
+  // The demo prep loop likewise depends only on the required base analysis.
+  assert.doesNotThrow(() =>
+    assertWorkflowIncludeFlags({
+      ...DEFAULTS,
+      includeFlow: false,
+      includeGapReport: false,
+      includeDemoPrepLoop: true,
+    }),
+  );
+  // The weekly review depends only on the required base analysis too.
+  assert.doesNotThrow(() =>
+    assertWorkflowIncludeFlags({ ...DEFAULTS, includeWeeklyReview: true }),
+  );
+  assert.doesNotThrow(() =>
+    assertWorkflowIncludeFlags({
+      ...DEFAULTS,
+      includeFlow: false,
+      includeGapReport: false,
+      includeWeeklyReview: true,
+    }),
+  );
 });
 
 test('a disabled prerequisite fails validation with a clear message', () => {
@@ -129,6 +211,15 @@ test('a disabled prerequisite fails validation with a clear message', () => {
   assert.throws(
     () => assertWorkflowIncludeFlags({ ...DEFAULTS, includeDailyUpdate: true }),
     /includeDailyUpdate requires includePrDescription to be enabled/,
+  );
+  assert.throws(
+    () =>
+      assertWorkflowIncludeFlags({
+        ...DEFAULTS,
+        includeDailyWorkGuidance: true,
+        includeGapReport: false,
+      }),
+    /includeDailyWorkGuidance requires includeGapReport to be enabled/,
   );
 });
 

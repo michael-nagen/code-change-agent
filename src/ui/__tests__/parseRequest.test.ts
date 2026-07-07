@@ -56,6 +56,9 @@ test('include flags can be toggled independently', () => {
       includePrDescription: allOff.includePrDescription,
       includeVideoScript: allOff.includeVideoScript,
       includeDailyUpdate: allOff.includeDailyUpdate,
+      includeDailyWorkGuidance: allOff.includeDailyWorkGuidance,
+      includeTechnicalChangeBrief: allOff.includeTechnicalChangeBrief,
+      includeDemoPrepLoop: allOff.includeDemoPrepLoop,
     },
     {
       includeFlow: false,
@@ -63,6 +66,9 @@ test('include flags can be toggled independently', () => {
       includePrDescription: false,
       includeVideoScript: false,
       includeDailyUpdate: false,
+      includeDailyWorkGuidance: false,
+      includeTechnicalChangeBrief: false,
+      includeDemoPrepLoop: false,
     },
   );
 
@@ -72,12 +78,34 @@ test('include flags can be toggled independently', () => {
     includeFlow: true,
     includeGapReport: true,
     includeVideoScript: true,
+    includeDailyWorkGuidance: true,
   });
   assert.equal(someOn.includeFlow, true);
   assert.equal(someOn.includeGapReport, true);
   assert.equal(someOn.includeVideoScript, true);
   assert.equal(someOn.includePrDescription, false);
   assert.equal(someOn.includeDailyUpdate, false);
+  assert.equal(someOn.includeDailyWorkGuidance, true);
+  assert.equal(someOn.includeTechnicalChangeBrief, false);
+  assert.equal(someOn.includeDemoPrepLoop, false);
+});
+
+test('includeTechnicalChangeBrief is parsed independently', () => {
+  const sub = parseFormSubmission({
+    requirementText: 'r',
+    rawDiff: 'd',
+    includeTechnicalChangeBrief: true,
+  });
+  assert.equal(sub.includeTechnicalChangeBrief, true);
+});
+
+test('includeDemoPrepLoop is parsed independently', () => {
+  const sub = parseFormSubmission({
+    requirementText: 'r',
+    rawDiff: 'd',
+    includeDemoPrepLoop: true,
+  });
+  assert.equal(sub.includeDemoPrepLoop, true);
 });
 
 test('non-boolean flag values are coerced to false (only true counts)', () => {

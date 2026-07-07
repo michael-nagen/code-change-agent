@@ -15,8 +15,11 @@ import type { ArtifactEditSkill } from '../skills/artifactEdit/index.js';
 import { MockArtifactEditSkill } from '../skills/mocks/index.js';
 import { handleAnalyze } from './handleAnalyze.js';
 import { handleChatEdit, handleUndoArtifactEdit } from './handleChatEdit.js';
+import { handleSaveMemory } from './handleSaveMemory.js';
 import { UiSessionStore } from './sessionStore.js';
 import { renderPage } from './page.js';
+import { InMemoryMemoryStore } from '../memory/index.js';
+import type { MemoryStore } from '../memory/index.js';
 
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
@@ -61,6 +64,7 @@ export function createUiServer(options: {
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill?: ArtifactEditSkill;
+  memoryStore?: MemoryStore;
 }): Server {
   return createServer(createUiRequestListener(options));
 }
@@ -78,14 +82,16 @@ export function createUiRequestListener({
   runner,
   mode,
   artifactEditSkill = new MockArtifactEditSkill(),
+  memoryStore = new InMemoryMemoryStore(),
 }: {
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill?: ArtifactEditSkill;
+  memoryStore?: MemoryStore;
 }): (req: IncomingMessage, res: ServerResponse) => void {
   const store = new UiSessionStore();
   return (req, res) => {
-    void handleRequest({ req, res, runner, mode, artifactEditSkill, store });
+    void handleRequest({ req, res, runner, mode, artifactEditSkill, memoryStore, store });
   };
 }
 
@@ -118,6 +124,7 @@ async function handleRequest({
   runner,
   mode,
   artifactEditSkill,
+  memoryStore,
   store,
 }: {
   req: IncomingMessage;
@@ -125,6 +132,7 @@ async function handleRequest({
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill: ArtifactEditSkill;
+  memoryStore: MemoryStore;
   store: UiSessionStore;
 }): Promise<void> {
   const method = req.method ?? 'GET';
@@ -171,6 +179,22 @@ async function handleRequest({
       return;
     }
     const response = handleUndoArtifactEdit({
+      store,
+      sessionId: sessionRoute.sessionId,
+      body: parsed.value,
+    });
+    sendJson(res, 200, response);
+    return;
+  }
+
+  if (method === 'POST' && sessionRoute !== null && sessionRoute.action === 'save-memory') {
+    const parsed = await readJsonBody(req);
+    if (!parsed.ok) {
+      sendJson(res, 400, { status: 'error', message: 'Request body must be valid JSON.' });
+      return;
+    }
+    const response = await handleSaveMemory({
+      memoryStore,
       store,
       sessionId: sessionRoute.sessionId,
       body: parsed.value,

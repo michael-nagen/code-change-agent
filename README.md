@@ -1,17 +1,23 @@
-# Code Change Understanding Agent — Harness (V1)
+# Code Change Understanding Agent
 
-The **orchestration layer** for the Code Change Understanding Agent. This
-milestone builds *only* the Harness: lifecycle, session state, the two memory
-layers, workflow execution, and recomputation avoidance.
+An agent that turns a **code change** into a source-of-truth analysis, then
+generates and edits communication artifacts (PR description, walkthrough script,
+daily update) from that analysis.
 
 This is a **change understanding** agent, not a codebase understanding agent.
 
 ```
-Requirement + Diff  ->  Change Understanding  ->  Code Understanding Report
+Requirement + Diff
+  -> Change Explanation  (What Changed)
+  -> Feature Flow        (optional)
+  -> Requirement Alignment (Requirement Check)
+  -> Gap Report          (PR Readiness, optional)
+  -> PR Description / Video Script / Daily Update (on demand)
 ```
 
-> All AI reasoning is mocked in V1. The goal is to validate the architecture,
-> state management, and workflow orchestration — not the intelligence.
+> Reasoning lives in LLM-backed **skills**; the harness orchestrates them and
+> never reasons itself. Provider-free mock models are available for tests and
+> examples so the whole pipeline can run without a live model.
 
 ## Requirements
 
@@ -55,57 +61,65 @@ skills never read the environment. `.env` and `.env.local` are gitignored;
 ## Architecture
 
 ```
-examples/runExample.ts
+examples/runExample.ts / src/ui
         │ uses
-CodeUnderstandingHarness        (orchestration only — no reasoning)
-   ├── SessionStore             (in-memory; owns SessionState + memory layers)
-   ├── ChangeUnderstandingSkill (interface)  ──> Mock impl (V1)
-   └── OutputGenerator[]        (interface)  ──> Mock report generator (V1)
+AnalysisHarness                 (orchestration only — no reasoning)
+   ├── AnalyzeCodeChangeWorkflow (step sequencing + artifact reuse)
+   ├── SkillRegistry            (LLM-backed skills, injected or built from a model)
+   ├── ArtifactStore            (in-memory session/artifact storage)
+   └── Input adapters           (git, requirement, Notion — external I/O only)
 ```
 
-- **Harness** sequences phases (`created → started → understood → reported`),
-  guards step ordering, and skips recomputation (memory-first; `{ force: true }`
-  to override). It delegates all reasoning to skills.
-- **SessionStore** is in-memory only (no DB, files, or repository in V1). It
-  holds **Understanding Memory** (`understanding`) and **Output Memory**
-  (`outputs`) and returns immutable snapshots.
-- **Skills / generators** carry all business logic. Mocked for now; swap in real
-  implementations via the constructor without touching the Harness.
+- **AnalysisHarness** (`src/analysis/AnalysisHarness.ts`) wires adapters and
+  skills into the workflow, stores sessions, and reuses artifacts. It builds no
+  prompts, parses no model output, and interprets no diffs — that is all in
+  skills.
+- **Workflow** (`src/analysis/AnalyzeCodeChangeWorkflow.ts`, shape declared in
+  `workflowDefinition.ts`) runs the steps in order and skips any step whose
+  artifact already exists on the session ("analyze once").
+- **Skills** (`src/skills/*`) carry all reasoning. Inject real
+  `LanguageModel`-backed skills, a single shared `model`, or mock models.
+- **Stores** are in-memory (no DB in this milestone): `InMemoryArtifactStore`
+  for sessions and `InMemoryProjectStore` for projects.
 
 ## API
 
 ```ts
-const harness = new CodeUnderstandingHarness();   // defaults to mock skills
+// Inject a single model to build the default LLM-backed skills…
+const harness = new AnalysisHarness({ model });
+// …or inject individual skills (e.g. mock models) for tests/examples.
 
-await harness.start({ requirement, diff });        // created -> started
-await harness.buildUnderstanding();                // started -> understood
-await harness.generateReport();                    // understood -> reported
-const state = harness.getState();                  // immutable snapshot
+const result = await harness.runAnalysis({ rawDiff, requirementText });
 
-// or the convenience pipeline:
-const report = await harness.run({ requirement, diff });
+// Reuse a prior session: existing artifacts are kept and only newly-requested
+// outputs are generated.
+await harness.runAnalysis({
+  rawDiff,
+  requirementText,
+  sessionId: result.sessionId,
+  includePrDescription: true,
+});
 ```
 
-## SessionState shape
+## AnalysisResult shape (abridged)
 
 ```ts
 {
-  id: string;
-  phase: 'created' | 'started' | 'understood' | 'reported';
-  createdAt: string;
-  updatedAt: string;
-  inputs: { requirement: string; diff: string };
-  understanding?: { /* Understanding Memory */ };
-  outputs: { codeUnderstandingReport?: string /* Output Memory */ };
+  sessionId: string;
+  requirementInput: { requirementText: string; source: string };
+  changeExplanation: { /* What Changed */ };
+  requirementAlignment: { /* Requirement Check */ confidence: string };
+  flowArtifact?: { /* Feature Flow */ };
+  gapReport?: { /* PR Readiness */ readiness: string };
+  prDescription?: { /* on demand */ };
+  videoScript?: { /* on demand */ };
+  dailyUpdate?: { /* on demand */ };
 }
 ```
 
 ## Future extensions
 
-- **New outputs** (PR description, video script, flow, presentation): add a key
-  to `SessionOutputs`, implement `OutputGenerator`, and register it. The Harness
-  is unchanged — `generate(key)` handles any registered generator.
-- **Real LLM skills**: implement the existing interfaces and inject them.
-- **Persistence**: swap `SessionStore` for a repository-backed store later
-  (deliberately out of scope for V1).
-- **Multi-session**: introduce a manager keyed by session `id` if needed.
+- **New outputs**: add a step to `workflowDefinition.ts`, implement the skill,
+  and register it in `AnalysisHarness`. The workflow reuse logic is unchanged.
+- **Real LLM skills**: implement the skill interfaces and inject them.
+- **Persistence**: swap the in-memory stores for repository-backed ones later.

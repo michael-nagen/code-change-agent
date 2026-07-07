@@ -26,9 +26,10 @@ export class HarnessAnalysisRunner implements AnalysisRunner {
   }
 
   async run(request: AnalysisRequest): Promise<AnalysisResult> {
-    // `projectName` is display-only in v0 (no persistence). It is deliberately
-    // NOT forwarded as `projectId`: the harness requires a project that already
-    // exists in its store, so passing an arbitrary name would fail the run.
+    // `projectName` is display-only. `projectId` (when present) is the stable
+    // memory key derived from it: the harness uses it to load durable developer
+    // memory and only attaches to a registered project if one exists, so an
+    // unregistered memory key is safe.
     //
     // `sessionId` (when present) drives on-demand generation: the harness reuses
     // artifacts already on the session and only runs the newly-requested skills.
@@ -40,6 +41,12 @@ export class HarnessAnalysisRunner implements AnalysisRunner {
       includePrDescription: request.includePrDescription,
       includeVideoScript: request.includeVideoScript,
       includeDailyUpdate: request.includeDailyUpdate,
+      includeDailyWorkGuidance: request.includeDailyWorkGuidance,
+      includeTechnicalChangeBrief: request.includeTechnicalChangeBrief,
+      includeDemoPrepLoop: request.includeDemoPrepLoop,
+      includeWeeklyReview: request.includeWeeklyReview,
+      ...(request.userId !== undefined ? { userId: request.userId } : {}),
+      ...(request.projectId !== undefined ? { projectId: request.projectId } : {}),
       ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
     });
   }
@@ -75,6 +82,13 @@ export class MockAnalysisRunner implements AnalysisRunner {
         'includeDailyUpdate requires includeFlow, includeGapReport, includePrDescription to be enabled.',
       );
     }
+    if (request.includeDailyWorkGuidance && (!request.includeFlow || !request.includeGapReport)) {
+      throw new Error(
+        'includeDailyWorkGuidance requires includeFlow, includeGapReport to be enabled.',
+      );
+    }
+    // The technical change brief depends only on the required base analysis, so
+    // it imposes no additional include-flag prerequisites.
 
     const result: AnalysisResult = {
       // Echo a provided sessionId so the UI's on-demand generation keeps a
@@ -164,6 +178,359 @@ export class MockAnalysisRunner implements AnalysisRunner {
           whyItMatters: `${MOCK_TAG} Demo importance.`,
         },
         spokenVersion: `${MOCK_TAG} Demo spoken update.`,
+      };
+    }
+    if (request.includeDailyWorkGuidance) {
+      const date = new Date().toISOString().slice(0, 10);
+      result.dailyWorkGuidance = {
+        yesterdaySummary: `${MOCK_TAG} Demo summary of yesterday's work.`,
+        progressVsSpec: [
+          {
+            item: `${MOCK_TAG} Demo checklist item.`,
+            whatChanged: `${MOCK_TAG} Demo change.`,
+            newStatus: 'unclear',
+            evidence: `${MOCK_TAG} Demo evidence.`,
+            confidence: 'low',
+          },
+        ],
+        advancedChecklistItems: [],
+        blockersAndRisks: [
+          {
+            title: `${MOCK_TAG} Demo blocker.`,
+            description: `${MOCK_TAG} Demo description.`,
+            whyItMatters: `${MOCK_TAG} Demo impact.`,
+            requiredAction: `${MOCK_TAG} Replace mock runner with real engine.`,
+          },
+        ],
+        decisionsNeedingApproval: [
+          {
+            decision: `${MOCK_TAG} Demo decision.`,
+            context: `${MOCK_TAG} Demo context.`,
+            status: 'pending_approval',
+          },
+        ],
+        plannedSteps: [
+          {
+            id: 'step-1',
+            title: `${MOCK_TAG} Demo step.`,
+            whyItMatters: `${MOCK_TAG} Demo rationale.`,
+            expectedOutput: `${MOCK_TAG} Demo output.`,
+            cursorPrompt: `${MOCK_TAG} Demo prompt — do not run against real code.`,
+            validationChecklist: [`${MOCK_TAG} Demo validation.`],
+            status: 'pending_approval',
+          },
+        ],
+        notionDailyUpdate: {
+          yesterday: `${MOCK_TAG} Demo yesterday.`,
+          today: `${MOCK_TAG} Demo today.`,
+          blockers: `${MOCK_TAG} Demo blockers.`,
+          decisionsNeeded: `${MOCK_TAG} Demo decisions.`,
+          progressVsSpec: `${MOCK_TAG} Demo progress summary.`,
+          nextCursorPrompt: `${MOCK_TAG} Demo next prompt.`,
+        },
+        memoryUpdate: {
+          date,
+          dailySummary: `${MOCK_TAG} Demo daily summary.`,
+          updatedChecklistStatuses: [{ item: `${MOCK_TAG} Demo item.`, status: 'unclear' }],
+          newDecisions: [`${MOCK_TAG} Demo decision.`],
+          openBlockers: [`${MOCK_TAG} Demo blocker.`],
+          nextActions: [`${MOCK_TAG} Demo next action.`],
+        },
+      };
+    }
+    // The demo prep loop, like the technical change brief, depends only on the
+    // required base analysis and imposes no additional flag prerequisites.
+    if (request.includeDemoPrepLoop) {
+      result.demoPrepLoop = {
+        loopStatus: {
+          currentStage: `${MOCK_TAG} Initial demo plan proposed.`,
+          overallStatus: 'pending_user_review',
+          nextRecommendedAction: `${MOCK_TAG} Review the walkthrough order.`,
+          whatNeedsUserApproval: [`${MOCK_TAG} Demo story.`],
+        },
+        demoStoryProposal: {
+          problem: `${MOCK_TAG} Demo problem.`,
+          solution: `${MOCK_TAG} Demo solution.`,
+          technicalChange: `${MOCK_TAG} Demo technical change.`,
+          userOrProductValue: `${MOCK_TAG} Demo value.`,
+          proofOrDemoMoment: `${MOCK_TAG} Demo proof moment.`,
+          limitationsOrNextSteps: `${MOCK_TAG} Demo limitation.`,
+          status: 'pending_approval',
+        },
+        walkthroughOrder: [
+          {
+            order: 1,
+            title: `${MOCK_TAG} Demo walkthrough step`,
+            filePath: 'demo/file.ts',
+            type: 'code',
+            whyThisComesHere: `${MOCK_TAG} Demo rationale.`,
+            whatToShow: `${MOCK_TAG} Demo focus.`,
+            whatToSay: `${MOCK_TAG} Demo narration.`,
+            whatToSkip: `${MOCK_TAG} Demo skip note.`,
+            relatedFeatureOrConcept: `${MOCK_TAG} Demo concept.`,
+            estimatedTimeSeconds: 45,
+            mustShow: true,
+            evidence: 'inferred',
+            status: 'pending_approval',
+          },
+        ],
+        codeEvidencePlan: [
+          {
+            filePath: 'demo/file.ts',
+            evidenceType: 'workflow',
+            whatItProves: `${MOCK_TAG} Demo proof.`,
+            whyItMatters: `${MOCK_TAG} Demo importance.`,
+            confidence: 'low',
+            evidence: 'inferred',
+            status: 'pending_approval',
+          },
+        ],
+        screenshotPlan: [
+          {
+            id: 'shot-1',
+            title: `${MOCK_TAG} Demo screenshot`,
+            type: 'code',
+            filePath: 'demo/file.ts',
+            whatToCapture: `${MOCK_TAG} Demo capture note.`,
+            whyThisMatters: `${MOCK_TAG} Demo importance.`,
+            whatToSay: `${MOCK_TAG} Demo narration.`,
+            whatToSkip: `${MOCK_TAG} Demo skip note.`,
+            relatedFeatureOrConcept: `${MOCK_TAG} Demo concept.`,
+            estimatedTimeSeconds: 30,
+            mustShow: true,
+            suggestedCaption: `${MOCK_TAG} Demo caption.`,
+            evidence: 'inferred',
+            status: 'pending_approval',
+          },
+        ],
+        approvalQuestions: [
+          {
+            question: `${MOCK_TAG} Demo approval question?`,
+            whyItMatters: `${MOCK_TAG} Demo stakes.`,
+            options: ['Option A', 'Option B'],
+            recommendedOption: 'Option A',
+            status: 'pending_approval',
+          },
+        ],
+        deckPlan: [
+          {
+            slideNumber: 1,
+            title: `${MOCK_TAG} Demo opening slide`,
+            purpose: `${MOCK_TAG} Demo purpose.`,
+            visualType: 'bullets',
+            whatToShow: `${MOCK_TAG} Demo bullets.`,
+            onSlideText: [`${MOCK_TAG} Short bullet`, `${MOCK_TAG} Another bullet`],
+            speakerNotes: `${MOCK_TAG} Demo speaker notes.`,
+            narrationScript: `${MOCK_TAG} Demo narration script.`,
+            transitionToNextSlide: `${MOCK_TAG} Demo transition.`,
+            estimatedTimeSeconds: 30,
+            mustHave: true,
+            status: 'draft',
+          },
+          {
+            slideNumber: 2,
+            title: `${MOCK_TAG} Demo evidence slide`,
+            purpose: `${MOCK_TAG} Demo purpose.`,
+            visualType: 'code_screenshot',
+            screenshotIds: ['shot-1'],
+            whatToShow: `${MOCK_TAG} Demo screenshot.`,
+            onSlideText: [`${MOCK_TAG} Short bullet`],
+            speakerNotes: `${MOCK_TAG} Demo speaker notes.`,
+            narrationScript: `${MOCK_TAG} Demo narration script.`,
+            transitionToNextSlide: `${MOCK_TAG} Demo transition.`,
+            estimatedTimeSeconds: 40,
+            mustHave: false,
+            status: 'draft',
+          },
+        ],
+        draftVideoScript: {
+          title: `${MOCK_TAG} Demo video script`,
+          estimatedDuration: '5-7 minutes',
+          sections: [
+            {
+              kind: 'opening',
+              title: `${MOCK_TAG} Opening`,
+              narration: `${MOCK_TAG} Demo narration.`,
+              visualCue: `${MOCK_TAG} Demo visual cue.`,
+              estimatedTimeSeconds: 30,
+            },
+            {
+              kind: 'implementation_walkthrough',
+              title: `${MOCK_TAG} Walkthrough`,
+              narration: `${MOCK_TAG} Demo narration.`,
+              visualCue: `${MOCK_TAG} Demo visual cue.`,
+              estimatedTimeSeconds: 120,
+            },
+            {
+              kind: 'closing',
+              title: `${MOCK_TAG} Closing`,
+              narration: `${MOCK_TAG} Demo narration.`,
+              visualCue: `${MOCK_TAG} Demo visual cue.`,
+              estimatedTimeSeconds: 30,
+            },
+          ],
+        },
+        finalShortPitch: `${MOCK_TAG} Demo 30-45 second pitch.`,
+        readinessChecklist: [
+          { item: `${MOCK_TAG} Run tests`, why: `${MOCK_TAG} Demo reason.`, done: false },
+          { item: `${MOCK_TAG} Capture screenshots`, why: `${MOCK_TAG} Demo reason.`, done: false },
+        ],
+      };
+    }
+    if (request.includeTechnicalChangeBrief) {
+      result.technicalChangeBrief = {
+        executiveSummary: `${MOCK_TAG} Demo summary of what was built and why.`,
+        dataSchemaChanges: {
+          hasChanges: false,
+          summary: `${MOCK_TAG} No data/schema changes in this demo diff.`,
+          newFields: [],
+          changedFields: [],
+          removedFields: [],
+          newSchemas: [],
+          changedParserContracts: [],
+          newStatusValues: [],
+          persistedDataImpact: `${MOCK_TAG} Demo: no persisted data affected.`,
+          backwardCompatibility: 'unclear',
+          backwardCompatibilityNote: `${MOCK_TAG} Demo data — do not treat as real.`,
+        },
+        modelsAndTypes: [
+          {
+            name: `${MOCK_TAG} DemoType`,
+            represents: `${MOCK_TAG} Demo representation.`,
+            whyNeeded: `${MOCK_TAG} Demo rationale.`,
+            importantFields: [`${MOCK_TAG} demoField: demo meaning`],
+            evidence: 'inferred',
+          },
+        ],
+        inputsApiFlags: [
+          {
+            name: `${MOCK_TAG} includeDemo`,
+            kind: 'includeFlag',
+            description: `${MOCK_TAG} Demo include flag.`,
+            evidence: 'inferred',
+          },
+        ],
+        workflowRuntimeChanges: {
+          summary: `${MOCK_TAG} Demo workflow impact.`,
+          whereItRuns: `${MOCK_TAG} Demo location.`,
+          dependsOn: [`${MOCK_TAG} Demo dependency.`],
+          consumesArtifacts: [`${MOCK_TAG} Demo artifact.`],
+          producesArtifact: `${MOCK_TAG} Demo artifact.`,
+          cachedOrReused: `${MOCK_TAG} Demo caching note.`,
+          behaviorWhenFlagOff: `${MOCK_TAG} Demo off behavior.`,
+        },
+        uiChanges: {
+          hasChanges: false,
+          summary: `${MOCK_TAG} No UI changes in this demo diff.`,
+          newCardsOrViews: [],
+          togglesOrButtons: [],
+          copyActions: [],
+          sectionsDisplayed: [],
+          howToActivate: `${MOCK_TAG} not visible from the provided diff/analysis`,
+        },
+        interestingFunctionality: [
+          {
+            title: `${MOCK_TAG} Demo functionality`,
+            whatItDoes: `${MOCK_TAG} Demo behavior.`,
+            whyItMatters: `${MOCK_TAG} Demo importance.`,
+            howItWorks: `${MOCK_TAG} Demo internals.`,
+            filesInvolved: [`${MOCK_TAG} demo/file.ts`],
+          },
+        ],
+        howItWorksStepByStep: [
+          { actor: 'User', action: `${MOCK_TAG} Enables the demo flag.` },
+          { action: `${MOCK_TAG} Demo step runs.`, detail: `${MOCK_TAG} Demo detail.` },
+        ],
+        filesWorthShowing: [
+          {
+            path: `${MOCK_TAG} demo/file.ts`,
+            whyItMatters: `${MOCK_TAG} Demo reason.`,
+            whatToPointOut: `${MOCK_TAG} Demo highlight.`,
+          },
+        ],
+        talkingPoints: [
+          `${MOCK_TAG} Demo talking point one.`,
+          `${MOCK_TAG} Demo talking point two.`,
+        ],
+      };
+    }
+
+    // The weekly review, like the technical change brief and demo prep loop,
+    // depends only on the required base analysis and imposes no extra flags.
+    if (request.includeWeeklyReview) {
+      const generatedAt = new Date().toISOString();
+      result.weeklyReview = {
+        status: {
+          status: 'draft',
+          confidence: 'low',
+          missingInputs: [`${MOCK_TAG} demo run — inputs not real`],
+          reviewPeriodLabel: `Week ending ${generatedAt.slice(0, 10)}`,
+          generatedAt,
+        },
+        executiveSummary: `${MOCK_TAG} Demo summary of the week.`,
+        progressAgainstSpec: [
+          {
+            title: `${MOCK_TAG} Demo checklist item.`,
+            status: 'unclear',
+            evidence: `${MOCK_TAG} Demo evidence.`,
+            notes: `${MOCK_TAG} Demo note.`,
+            source: 'inferred',
+          },
+        ],
+        whatChangedTechnically: {
+          schemaOrDataChanges: [],
+          modelOrTypeChanges: [{ description: `${MOCK_TAG} Demo type change.`, evidence: 'inferred' }],
+          workflowOrRuntimeChanges: [],
+          uiChanges: [],
+          toolsOrSkillsAdded: [],
+          importantFilesOrModules: [],
+        },
+        keyDecisions: [
+          {
+            decision: `${MOCK_TAG} Demo decision.`,
+            why: `${MOCK_TAG} Demo rationale.`,
+            impact: `${MOCK_TAG} Demo impact.`,
+            status: 'open',
+            source: 'inferred',
+          },
+        ],
+        blockersAndRisks: [
+          {
+            title: `${MOCK_TAG} Demo blocker.`,
+            whyItMatters: `${MOCK_TAG} Demo impact.`,
+            status: 'open',
+            suggestedNextAction: `${MOCK_TAG} Replace mock runner with real engine.`,
+          },
+        ],
+        demoVideoStory: {
+          strongestStory: `${MOCK_TAG} Demo story of the week.`,
+          whatToShow: [`${MOCK_TAG} Demo thing to show.`],
+          whatToSay: [`${MOCK_TAG} Demo thing to say.`],
+          whatToSkip: [`${MOCK_TAG} Demo thing to skip.`],
+          recommendedStructure: [
+            { title: `${MOCK_TAG} Intro`, durationLabel: '~1 min', focus: `${MOCK_TAG} Demo focus.` },
+          ],
+          keyFilesOrScreens: [],
+          strongestProductSentence: `${MOCK_TAG} Demo product sentence.`,
+        },
+        reviewTalkingPoints: [`${MOCK_TAG} Demo talking point.`],
+        suggestedWeeklyUpdate: {
+          thisWeek: `${MOCK_TAG} Demo this week.`,
+          technicalProgress: `${MOCK_TAG} Demo technical progress.`,
+          demoProductProgress: `${MOCK_TAG} Demo product progress.`,
+          blockers: `${MOCK_TAG} Demo blockers.`,
+          nextWeek: `${MOCK_TAG} Demo next week.`,
+        },
+        nextWeekPlan: [`${MOCK_TAG} Demo next-week item.`],
+        memoryUpdateProposal: {
+          latestWeeklySummary: `${MOCK_TAG} Demo weekly summary.`,
+          updatedChecklistStatuses: [{ item: `${MOCK_TAG} Demo item.`, status: 'unclear' }],
+          newDecisions: [`${MOCK_TAG} Demo decision.`],
+          updatedBlockers: [`${MOCK_TAG} Demo blocker.`],
+          nextActions: [`${MOCK_TAG} Demo next action.`],
+          demoStorySummary: `${MOCK_TAG} Demo story summary.`,
+          filesWorthShowing: [],
+        },
       };
     }
 

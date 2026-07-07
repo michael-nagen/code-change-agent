@@ -57,6 +57,42 @@ export const ANALYZE_CODE_CHANGE_WORKFLOW: readonly WorkflowStepDefinition[] = [
     ],
     includeFlag: 'includeDailyUpdate',
   },
+  {
+    name: 'dailyWorkGuidance',
+    artifactKey: 'dailyWorkGuidance',
+    dependsOn: ['changeExplanation', 'requirementAlignment', 'gapReport', 'flowGeneration'],
+    includeFlag: 'includeDailyWorkGuidance',
+  },
+  {
+    // Depends only on the required base artifacts so it can run with just the
+    // base analysis; the gap report, flow artifact, and daily work guidance are
+    // consumed opportunistically when present, never required.
+    name: 'technicalChangeBrief',
+    artifactKey: 'technicalChangeBrief',
+    dependsOn: ['changeExplanation', 'requirementAlignment'],
+    includeFlag: 'includeTechnicalChangeBrief',
+  },
+  {
+    // Depends only on the required base artifacts so it can run with just the
+    // base analysis; the gap report, flow artifact, daily work guidance,
+    // technical change brief, and video script are consumed opportunistically
+    // when present, never required.
+    name: 'demoPrepLoop',
+    artifactKey: 'demoPrepLoop',
+    dependsOn: ['changeExplanation', 'requirementAlignment'],
+    includeFlag: 'includeDemoPrepLoop',
+  },
+  {
+    // The higher-level weekly synthesis. Depends only on the required base
+    // artifacts so it can run with just the base analysis; daily work guidance,
+    // the technical change brief, and the demo prep loop are consumed
+    // opportunistically when present (never required) and a missing demo prep
+    // loop simply lowers the demo/video story confidence.
+    name: 'weeklyReview',
+    artifactKey: 'weeklyReview',
+    dependsOn: ['changeExplanation', 'requirementAlignment'],
+    includeFlag: 'includeWeeklyReview',
+  },
 ];
 
 /** A step runs when it has no include flag (required) or its flag is enabled. */

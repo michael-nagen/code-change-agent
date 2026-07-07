@@ -6,3 +6,6 @@ node_modules/
 .env.local
 !.env.example
 .vercel
+
+# Persistent developer memory (local file store). Never commit real memory data.
+data/

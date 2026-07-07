@@ -12,6 +12,7 @@ import type { AnalysisRequest, AnalysisRunner, AnalyzeResponse, UiMode } from '.
 import { parseFormSubmission, RequestParseError } from './parseRequest.js';
 import { normalizeInput, type FetchLike } from './normalizeInput.js';
 import { renderWorkspaceCards } from './features/artifactViews/index.js';
+import { resolveUserId, toMemoryProjectId } from '../memory/index.js';
 import type { UiSessionStore } from './sessionStore.js';
 
 export async function handleAnalyze({
@@ -43,6 +44,12 @@ export async function handleAnalyze({
       ...(fetchImpl !== undefined ? { fetchImpl } : {}),
     });
 
+    // Derive a stable, durable memory key from the (display-only) project name.
+    // When there is no project name there is no project memory — behavior is
+    // unchanged from before memory existed.
+    const projectId =
+      submission.projectName !== undefined ? toMemoryProjectId(submission.projectName) : undefined;
+
     const request: AnalysisRequest = {
       requirementText,
       rawDiff,
@@ -51,7 +58,13 @@ export async function handleAnalyze({
       includePrDescription: submission.includePrDescription,
       includeVideoScript: submission.includeVideoScript,
       includeDailyUpdate: submission.includeDailyUpdate,
+      includeDailyWorkGuidance: submission.includeDailyWorkGuidance,
+      includeTechnicalChangeBrief: submission.includeTechnicalChangeBrief,
+      includeDemoPrepLoop: submission.includeDemoPrepLoop,
+      includeWeeklyReview: submission.includeWeeklyReview,
+      userId: resolveUserId(),
       ...(submission.projectName !== undefined ? { projectName: submission.projectName } : {}),
+      ...(projectId !== undefined ? { projectId } : {}),
       ...(submission.sessionId !== undefined ? { sessionId: submission.sessionId } : {}),
     };
 

@@ -22,10 +22,105 @@ import { renderFlow } from '../components/FeatureFlowView.js';
 import { renderPrDescription } from '../components/PrDraftView.js';
 import { renderVideoScript } from '../components/WalkthroughScriptView.js';
 import { renderDailyUpdate } from '../components/DailyPrepView.js';
-import { prDescriptionToMarkdown } from './copyFormatters.js';
+import { renderDailyWorkGuidance } from '../components/DailyWorkGuidanceView.js';
+import { renderTechnicalChangeBrief } from '../components/TechnicalChangeBriefView.js';
+import { renderDemoPrepLoop } from '../components/DemoPrepLoopView.js';
+import { renderWeeklyReview } from '../components/WeeklyReviewView.js';
+import type { DailyWorkGuidance } from '../../../../skills/dailyWorkGuidance/index.js';
+import type { TechnicalChangeBrief } from '../../../../skills/technicalChangeBrief/index.js';
+import type { DemoPrepLoop } from '../../../../skills/demoPrepLoop/index.js';
+import type { WeeklyReview } from '../../../../skills/weeklyReview/index.js';
+import { buildMarkdownDeck } from '../../../../tools/presentation/index.js';
+import {
+  prDescriptionToMarkdown,
+  dailyWorkGuidanceToMarkdown,
+  notionDailyUpdateToMarkdown,
+  technicalChangeBriefToMarkdown,
+  technicalChangeBriefTalkingPointsToMarkdown,
+  technicalChangeBriefFilesToMarkdown,
+  demoPrepLoopToMarkdown,
+  demoPrepLoopWalkthroughToMarkdown,
+  demoPrepLoopScreenshotPlanToMarkdown,
+  demoPrepLoopDeckPlanToMarkdown,
+  demoPrepLoopSpeakerNotesToMarkdown,
+  demoPrepLoopNarrationToMarkdown,
+  weeklyReviewToMarkdown,
+  weeklyReviewUpdateToMarkdown,
+  weeklyReviewDemoStoryToMarkdown,
+  weeklyReviewTalkingPointsToMarkdown,
+  weeklyReviewNextWeekToMarkdown,
+  weeklyReviewMemoryProposalToMarkdown,
+} from './copyFormatters.js';
 
 // Re-exported so the package's public surface (`./index.js`) stays unchanged.
 export { prDescriptionToMarkdown } from './copyFormatters.js';
+
+/**
+ * Extra labeled copy targets for Daily Work Guidance: the Notion-ready daily
+ * block, plus one per planned step's Cursor/Claude prompt. The full artifact is
+ * offered via the primary `copyText`.
+ */
+function dailyWorkGuidanceCopyActions(g: DailyWorkGuidance): { label: string; text: string }[] {
+  const actions = [
+    {
+      label: 'Notion daily',
+      text: notionDailyUpdateToMarkdown({ update: g.notionDailyUpdate, date: g.memoryUpdate.date }),
+    },
+  ];
+  for (const step of g.plannedSteps) {
+    actions.push({ label: `Prompt: ${step.title}`, text: step.cursorPrompt });
+  }
+  return actions;
+}
+
+/**
+ * Extra labeled copy targets for the Technical Change Brief: the talking points
+ * on their own and the files-worth-showing list. The full brief is offered via
+ * the primary `copyText`.
+ */
+function technicalChangeBriefCopyActions(
+  b: TechnicalChangeBrief,
+): { label: string; text: string }[] {
+  return [
+    { label: 'Talking points', text: technicalChangeBriefTalkingPointsToMarkdown(b) },
+    { label: 'Files worth showing', text: technicalChangeBriefFilesToMarkdown(b) },
+  ];
+}
+
+/**
+ * Builds the Markdown presentation deck from the structured deck plan via the
+ * deterministic presentation builder tool — pure formatting, no reasoning.
+ */
+function demoPrepLoopDeckMarkdown(x: DemoPrepLoop): string {
+  return buildMarkdownDeck({ deckPlan: x.deckPlan, screenshotPlan: x.screenshotPlan });
+}
+
+/**
+ * Extra labeled copy targets for the Demo Prep Loop: each plan section on its
+ * own, the pitch as raw text, and the generated Markdown deck. The full plan is
+ * offered via the primary `copyText`.
+ */
+function weeklyReviewCopyActions(r: WeeklyReview): { label: string; text: string }[] {
+  return [
+    { label: 'Weekly update', text: weeklyReviewUpdateToMarkdown(r) },
+    { label: 'Demo / video story', text: weeklyReviewDemoStoryToMarkdown(r) },
+    { label: 'Talking points', text: weeklyReviewTalkingPointsToMarkdown(r) },
+    { label: 'Next week plan', text: weeklyReviewNextWeekToMarkdown(r) },
+    { label: 'Memory update proposal', text: weeklyReviewMemoryProposalToMarkdown(r) },
+  ];
+}
+
+function demoPrepLoopCopyActions(x: DemoPrepLoop): { label: string; text: string }[] {
+  return [
+    { label: 'Walkthrough order', text: demoPrepLoopWalkthroughToMarkdown(x) },
+    { label: 'Screenshot plan', text: demoPrepLoopScreenshotPlanToMarkdown(x) },
+    { label: 'Deck plan', text: demoPrepLoopDeckPlanToMarkdown(x) },
+    { label: 'Speaker notes', text: demoPrepLoopSpeakerNotesToMarkdown(x) },
+    { label: 'Narration script', text: demoPrepLoopNarrationToMarkdown(x) },
+    { label: 'Short pitch', text: x.finalShortPitch },
+    { label: 'Markdown deck', text: demoPrepLoopDeckMarkdown(x) },
+  ];
+}
 
 function emptyState(label: string): string {
   return `<p class="muted">${escapeHtml(label)} hasn't been generated yet.</p>`;
@@ -46,11 +141,15 @@ function makeCard<T>({
   artifact,
   render,
   copyText,
+  copyActions,
+  downloadAction,
 }: {
   id: string;
   artifact: T | undefined;
   render: (artifact: T) => string;
   copyText?: (artifact: T) => string;
+  copyActions?: (artifact: T) => { label: string; text: string }[];
+  downloadAction?: (artifact: T) => { label: string; filename: string; text: string };
 }): WorkspaceCard {
   const { label, group } = artifactMetaOf(id);
   if (artifact === undefined) {
@@ -59,6 +158,12 @@ function makeCard<T>({
   const card: WorkspaceCard = { id, label, group, state: 'generated', html: render(artifact) };
   if (copyText !== undefined) {
     card.copyText = copyText(artifact);
+  }
+  if (copyActions !== undefined) {
+    card.copyActions = copyActions(artifact);
+  }
+  if (downloadAction !== undefined) {
+    card.downloadAction = downloadAction(artifact);
   }
   return card;
 }
@@ -105,6 +210,39 @@ export function renderWorkspaceCards(result: AnalysisResult): WorkspaceCard[] {
       id: 'dailyUpdate',
       artifact: result.dailyUpdate,
       render: renderDailyUpdate,
+    }),
+    makeCard({
+      id: 'dailyWorkGuidance',
+      artifact: result.dailyWorkGuidance,
+      render: renderDailyWorkGuidance,
+      copyText: dailyWorkGuidanceToMarkdown,
+      copyActions: dailyWorkGuidanceCopyActions,
+    }),
+    makeCard({
+      id: 'technicalChangeBrief',
+      artifact: result.technicalChangeBrief,
+      render: renderTechnicalChangeBrief,
+      copyText: technicalChangeBriefToMarkdown,
+      copyActions: technicalChangeBriefCopyActions,
+    }),
+    makeCard({
+      id: 'demoPrepLoop',
+      artifact: result.demoPrepLoop,
+      render: renderDemoPrepLoop,
+      copyText: demoPrepLoopToMarkdown,
+      copyActions: demoPrepLoopCopyActions,
+      downloadAction: (x) => ({
+        label: 'Download deck (.md)',
+        filename: 'demo-deck.md',
+        text: demoPrepLoopDeckMarkdown(x),
+      }),
+    }),
+    makeCard({
+      id: 'weeklyReview',
+      artifact: result.weeklyReview,
+      render: renderWeeklyReview,
+      copyText: weeklyReviewToMarkdown,
+      copyActions: weeklyReviewCopyActions,
     }),
     {
       id: 'rawJson',

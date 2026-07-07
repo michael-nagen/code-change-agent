@@ -26,6 +26,10 @@ export async function runAnalyzeCodeChange({
   includeVideoScript,
   includePrDescription,
   includeDailyUpdate,
+  includeDailyWorkGuidance,
+  includeTechnicalChangeBrief,
+  includeDemoPrepLoop,
+  includeWeeklyReview,
 }: {
   session: AnalysisSession;
   registry: SkillRegistry;
@@ -36,6 +40,10 @@ export async function runAnalyzeCodeChange({
   includeVideoScript: boolean;
   includePrDescription: boolean;
   includeDailyUpdate: boolean;
+  includeDailyWorkGuidance: boolean;
+  includeTechnicalChangeBrief: boolean;
+  includeDemoPrepLoop: boolean;
+  includeWeeklyReview: boolean;
 }): Promise<AnalysisSession> {
   await runStep({
     session,
@@ -220,6 +228,169 @@ export async function runAnalyzeCodeChange({
           gapReport,
           prDescription,
           flowArtifact,
+        });
+      },
+    });
+  }
+
+  if (includeDailyWorkGuidance) {
+    await runStep({
+      session,
+      step: 'dailyWorkGuidance',
+      isAlreadyDone: () => session.artifacts.dailyWorkGuidance !== undefined,
+      run: async () => {
+        const requirementInput = session.inputs.requirementInput;
+        const { changeExplanation, requirementAlignment, gapReport, flowArtifact } =
+          session.artifacts;
+        if (
+          requirementInput === undefined ||
+          changeExplanation === undefined ||
+          requirementAlignment === undefined ||
+          gapReport === undefined ||
+          flowArtifact === undefined
+        ) {
+          throw new HarnessError(
+            'INVALID_PHASE',
+            'dailyWorkGuidance requires a normalized requirement, change explanation, requirement alignment, gap report, and flow artifact.',
+          );
+        }
+
+        const { previousProgressMemory, todayGoal } = session.inputs;
+        const date = new Date().toISOString().slice(0, 10);
+        const skill = registry.resolve('dailyWorkGuidance');
+        session.artifacts.dailyWorkGuidance = await skill.execute({
+          specOrChecklist: requirementInput.requirementText,
+          date,
+          changeExplanation,
+          requirementAlignment,
+          gapReport,
+          flowArtifact,
+          ...(previousProgressMemory !== undefined ? { previousProgressMemory } : {}),
+          ...(todayGoal !== undefined ? { todayGoal } : {}),
+        });
+      },
+    });
+  }
+
+  if (includeTechnicalChangeBrief) {
+    await runStep({
+      session,
+      step: 'technicalChangeBrief',
+      isAlreadyDone: () => session.artifacts.technicalChangeBrief !== undefined,
+      run: async () => {
+        const requirementInput = session.inputs.requirementInput;
+        const { changeExplanation, requirementAlignment, gapReport, flowArtifact, dailyWorkGuidance } =
+          session.artifacts;
+        if (
+          requirementInput === undefined ||
+          changeExplanation === undefined ||
+          requirementAlignment === undefined
+        ) {
+          throw new HarnessError(
+            'INVALID_PHASE',
+            'technicalChangeBrief requires a normalized requirement, change explanation, and requirement alignment.',
+          );
+        }
+
+        const skill = registry.resolve('technicalChangeBrief');
+        session.artifacts.technicalChangeBrief = await skill.execute({
+          rawDiff: session.inputs.rawDiff,
+          requirementText: requirementInput.requirementText,
+          changeExplanation,
+          requirementAlignment,
+          ...(gapReport !== undefined ? { gapReport } : {}),
+          ...(flowArtifact !== undefined ? { flowArtifact } : {}),
+          ...(dailyWorkGuidance !== undefined ? { dailyWorkGuidance } : {}),
+        });
+      },
+    });
+  }
+
+  if (includeDemoPrepLoop) {
+    await runStep({
+      session,
+      step: 'demoPrepLoop',
+      isAlreadyDone: () => session.artifacts.demoPrepLoop !== undefined,
+      run: async () => {
+        const requirementInput = session.inputs.requirementInput;
+        const {
+          changeExplanation,
+          requirementAlignment,
+          gapReport,
+          flowArtifact,
+          dailyWorkGuidance,
+          technicalChangeBrief,
+          videoScript,
+        } = session.artifacts;
+        if (
+          requirementInput === undefined ||
+          changeExplanation === undefined ||
+          requirementAlignment === undefined
+        ) {
+          throw new HarnessError(
+            'INVALID_PHASE',
+            'demoPrepLoop requires a normalized requirement, change explanation, and requirement alignment.',
+          );
+        }
+
+        const skill = registry.resolve('demoPrepLoop');
+        session.artifacts.demoPrepLoop = await skill.execute({
+          rawDiff: session.inputs.rawDiff,
+          requirementText: requirementInput.requirementText,
+          changeExplanation,
+          requirementAlignment,
+          ...(gapReport !== undefined ? { gapReport } : {}),
+          ...(flowArtifact !== undefined ? { flowArtifact } : {}),
+          ...(dailyWorkGuidance !== undefined ? { dailyWorkGuidance } : {}),
+          ...(technicalChangeBrief !== undefined ? { technicalChangeBrief } : {}),
+          ...(videoScript !== undefined ? { videoScript } : {}),
+        });
+      },
+    });
+  }
+
+  if (includeWeeklyReview) {
+    await runStep({
+      session,
+      step: 'weeklyReview',
+      isAlreadyDone: () => session.artifacts.weeklyReview !== undefined,
+      run: async () => {
+        const requirementInput = session.inputs.requirementInput;
+        const {
+          changeExplanation,
+          requirementAlignment,
+          gapReport,
+          flowArtifact,
+          dailyWorkGuidance,
+          technicalChangeBrief,
+          demoPrepLoop,
+        } = session.artifacts;
+        if (
+          requirementInput === undefined ||
+          changeExplanation === undefined ||
+          requirementAlignment === undefined
+        ) {
+          throw new HarnessError(
+            'INVALID_PHASE',
+            'weeklyReview requires a normalized requirement, change explanation, and requirement alignment.',
+          );
+        }
+
+        const { previousProgressMemory } = session.inputs;
+        const generatedAt = new Date().toISOString();
+        const skill = registry.resolve('weeklyReview');
+        session.artifacts.weeklyReview = await skill.execute({
+          rawDiff: session.inputs.rawDiff,
+          requirementText: requirementInput.requirementText,
+          generatedAt,
+          changeExplanation,
+          requirementAlignment,
+          ...(gapReport !== undefined ? { gapReport } : {}),
+          ...(flowArtifact !== undefined ? { flowArtifact } : {}),
+          ...(dailyWorkGuidance !== undefined ? { dailyWorkGuidance } : {}),
+          ...(technicalChangeBrief !== undefined ? { technicalChangeBrief } : {}),
+          ...(demoPrepLoop !== undefined ? { demoPrepLoop } : {}),
+          ...(previousProgressMemory !== undefined ? { previousProgressMemory } : {}),
         });
       },
     });

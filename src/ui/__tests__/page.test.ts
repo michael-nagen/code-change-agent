@@ -24,6 +24,9 @@ test('no upfront include-flag checkboxes are exposed to the user', () => {
     'includePrDescription',
     'includeVideoScript',
     'includeDailyUpdate',
+    'includeDailyWorkGuidance',
+    'includeDemoPrepLoop',
+    'includeWeeklyReview',
   ]) {
     assert.doesNotMatch(html, new RegExp(`id="${id}"`), `${id} checkbox must not be in the UI`);
   }
@@ -58,6 +61,9 @@ test('initial analysis does NOT request optional outputs upfront', () => {
   assert.match(html, /p\.includePrDescription = false/);
   assert.match(html, /p\.includeVideoScript = false/);
   assert.match(html, /p\.includeDailyUpdate = false/);
+  assert.match(html, /p\.includeDailyWorkGuidance = false/);
+  assert.match(html, /p\.includeDemoPrepLoop = false/);
+  assert.match(html, /p\.includeWeeklyReview = false/);
   assert.match(html, /p\.includeFlow = true; p\.includeGapReport = true/);
 });
 
@@ -66,6 +72,14 @@ test('on-demand generation is wired (Generate buttons + session continuation)', 
   assert.match(html, /function generate\(/);
   assert.match(html, /'Generate ' \+ label/);
   assert.match(html, /sessionId: state\.sessionId/);
+});
+
+test('Daily Work Guidance has an explicit Save to memory action wired to the save endpoint', () => {
+  const html = renderPage({ mode: 'mock' });
+  assert.match(html, /Save to memory/);
+  assert.match(html, /function saveMemoryButton/);
+  assert.match(html, /save-memory/);
+  assert.match(html, /api\.saveMemory/);
 });
 
 test('all four input modes remain available', () => {
@@ -97,6 +111,9 @@ test('friendly product labels are present', () => {
     'PR Draft',
     'Walkthrough Script',
     'Daily Prep',
+    'Daily Work Guidance',
+    'Demo Prep Loop',
+    'Weekly Review',
   ]) {
     assert.match(html, new RegExp(label), `missing label ${label}`);
   }

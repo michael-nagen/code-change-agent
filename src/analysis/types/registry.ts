@@ -14,6 +14,10 @@ import type { FlowGenerationSkill } from '../../skills/flowGeneration/index.js';
 import type { VideoScriptSkill } from '../../skills/videoScript/index.js';
 import type { PRDescriptionSkill } from '../../skills/prDescription/index.js';
 import type { DailyUpdateSkill } from '../../skills/dailyUpdate/index.js';
+import type { DailyWorkGuidanceSkill } from '../../skills/dailyWorkGuidance/index.js';
+import type { TechnicalChangeBriefSkill } from '../../skills/technicalChangeBrief/index.js';
+import type { DemoPrepLoopSkill } from '../../skills/demoPrepLoop/index.js';
+import type { WeeklyReviewSkill } from '../../skills/weeklyReview/index.js';
 
 /** Maps each skill key to the interface an implementation must satisfy. */
 export interface RegisteredSkills {
@@ -24,6 +28,10 @@ export interface RegisteredSkills {
   videoScript: VideoScriptSkill;
   prDescription: PRDescriptionSkill;
   dailyUpdate: DailyUpdateSkill;
+  dailyWorkGuidance: DailyWorkGuidanceSkill;
+  technicalChangeBrief: TechnicalChangeBriefSkill;
+  demoPrepLoop: DemoPrepLoopSkill;
+  weeklyReview: WeeklyReviewSkill;
 }
 
 export type SkillKey = keyof RegisteredSkills;

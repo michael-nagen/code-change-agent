@@ -36,8 +36,39 @@ import {
   DefaultDailyUpdateSkill,
   type DailyUpdateSkill,
 } from '../skills/dailyUpdate/index.js';
+import {
+  DefaultDailyWorkGuidanceSkill,
+  type DailyWorkGuidanceSkill,
+} from '../skills/dailyWorkGuidance/index.js';
+import {
+  DefaultTechnicalChangeBriefSkill,
+  type TechnicalChangeBriefSkill,
+} from '../skills/technicalChangeBrief/index.js';
+import {
+  DefaultDemoPrepLoopSkill,
+  type DemoPrepLoopSkill,
+} from '../skills/demoPrepLoop/index.js';
+import {
+  DefaultWeeklyReviewSkill,
+  type WeeklyReviewSkill,
+} from '../skills/weeklyReview/index.js';
 import { InMemoryProjectStore } from '../project/index.js';
 import type { ProjectStore } from '../project/index.js';
+import {
+  InMemoryMemoryStore,
+  buildDeveloperMemoryContext,
+  appendSnapshot,
+  DEFAULT_USER_ID,
+} from '../memory/index.js';
+import type {
+  MemoryStore,
+  DeveloperMemoryContext,
+  ProjectMemory,
+  UserPreferencesMemory,
+} from '../memory/index.js';
+import type { DailyWorkGuidance } from '../skills/dailyWorkGuidance/index.js';
+import type { WeeklyReview } from '../skills/weeklyReview/index.js';
+import { snapshotFromDailyWorkGuidance, snapshotFromWeeklyReview } from './memoryMapping.js';
 import { DefaultSkillRegistry } from './DefaultSkillRegistry.js';
 import { InMemoryArtifactStore } from './InMemoryArtifactStore.js';
 import { hashString } from './hashing.js';
@@ -79,6 +110,10 @@ export interface AnalysisHarnessDeps {
   videoScript?: VideoScriptSkill;
   prDescription?: PRDescriptionSkill;
   dailyUpdate?: DailyUpdateSkill;
+  dailyWorkGuidance?: DailyWorkGuidanceSkill;
+  technicalChangeBrief?: TechnicalChangeBriefSkill;
+  demoPrepLoop?: DemoPrepLoopSkill;
+  weeklyReview?: WeeklyReviewSkill;
   store?: ArtifactStore;
   /**
    * Stores Projects and the sessions they own. Defaults to in-memory. When a
@@ -86,6 +121,13 @@ export interface AnalysisHarnessDeps {
    * attached to the matching project through this store.
    */
   projectStore?: ProjectStore;
+  /**
+   * Durable developer memory. Defaults to an in-memory store so tests and
+   * library use never touch the filesystem; local/production runs inject a
+   * persistent store (see `resolveMemoryStore`). The harness depends only on the
+   * `MemoryStore` interface, never on how memory is stored.
+   */
+  memoryStore?: MemoryStore;
   requirementAdapter?: RequirementInputAdapter;
   /** Input adapter for git-sourced analysis; defaults to wrapping the real tool. */
   gitInputAdapter?: GitInputAdapter;
@@ -105,6 +147,7 @@ export class AnalysisHarness {
   private readonly registry: SkillRegistry;
   private readonly store: ArtifactStore;
   private readonly projectStore: ProjectStore;
+  private readonly memoryStore: MemoryStore;
   private readonly requirementAdapter: RequirementInputAdapter;
   private readonly gitInputAdapter: GitInputAdapter;
   private readonly notionPlugin: NotionPlugin;
@@ -166,10 +209,31 @@ export class AnalysisHarness {
       provided: deps.dailyUpdate,
       makeDefault: (m) => new DefaultDailyUpdateSkill(m),
     });
+    registerSkill({
+      key: 'dailyWorkGuidance',
+      provided: deps.dailyWorkGuidance,
+      makeDefault: (m) => new DefaultDailyWorkGuidanceSkill(m),
+    });
+    registerSkill({
+      key: 'technicalChangeBrief',
+      provided: deps.technicalChangeBrief,
+      makeDefault: (m) => new DefaultTechnicalChangeBriefSkill(m),
+    });
+    registerSkill({
+      key: 'demoPrepLoop',
+      provided: deps.demoPrepLoop,
+      makeDefault: (m) => new DefaultDemoPrepLoopSkill(m),
+    });
+    registerSkill({
+      key: 'weeklyReview',
+      provided: deps.weeklyReview,
+      makeDefault: (m) => new DefaultWeeklyReviewSkill(m),
+    });
 
     this.registry = registry;
     this.store = deps.store ?? new InMemoryArtifactStore();
     this.projectStore = deps.projectStore ?? new InMemoryProjectStore();
+    this.memoryStore = deps.memoryStore ?? new InMemoryMemoryStore();
     this.requirementAdapter = deps.requirementAdapter ?? new ManualRequirementInputAdapter();
     this.gitInputAdapter = deps.gitInputAdapter ?? new DefaultGitInputAdapter();
     this.notionPlugin = deps.notionPlugin ?? createNotionPlugin();
@@ -183,24 +247,41 @@ export class AnalysisHarness {
    */
   async runAnalysis({
     projectId,
+    userId,
     rawDiff,
     requirementText,
     sessionId,
+    previousProgressMemory,
+    todayGoal,
     includeFlow = true,
     includeGapReport = true,
     includeVideoScript = false,
     includePrDescription = false,
     includeDailyUpdate = false,
+    includeDailyWorkGuidance = false,
+    includeTechnicalChangeBrief = false,
+    includeDemoPrepLoop = false,
+    includeWeeklyReview = false,
   }: {
     projectId?: string;
+    /** Owner of the memory to load/save. Defaults to the single MVP user. */
+    userId?: string;
     rawDiff: string;
     requirementText: string;
     sessionId?: string;
+    /** Optional prior-session progress memory, used by daily-work-guidance. */
+    previousProgressMemory?: string;
+    /** Optional goal for today, used by daily-work-guidance. */
+    todayGoal?: string;
     includeFlow?: boolean;
     includeGapReport?: boolean;
     includeVideoScript?: boolean;
     includePrDescription?: boolean;
     includeDailyUpdate?: boolean;
+    includeDailyWorkGuidance?: boolean;
+    includeTechnicalChangeBrief?: boolean;
+    includeDemoPrepLoop?: boolean;
+    includeWeeklyReview?: boolean;
   }): Promise<AnalysisResult> {
     this.assertNonEmpty({ field: 'rawDiff', value: rawDiff });
     this.assertNonEmpty({ field: 'requirementText', value: requirementText });
@@ -210,9 +291,30 @@ export class AnalysisHarness {
       includeVideoScript,
       includePrDescription,
       includeDailyUpdate,
+      includeDailyWorkGuidance,
+      includeTechnicalChangeBrief,
+      includeDemoPrepLoop,
+      includeWeeklyReview,
     });
 
-    const session = this.loadOrCreateSession({ rawDiff, sessionId, projectId });
+    const { session, reused } = this.loadOrCreateSession({ rawDiff, sessionId, projectId });
+    if (reused) {
+      await this.assertReusedSessionInputsMatch({ session, rawDiff, requirementText });
+    }
+
+    // Load durable memory as SUPPORTING context. The current run's explicit
+    // inputs are the source of truth: memory only fills gaps, never overrides.
+    const memoryContext = await this.loadMemoryContext({ userId, projectId });
+    const resolvedPreviousProgress =
+      previousProgressMemory ?? memoryContext?.previousProgressMemory;
+    const resolvedTodayGoal = todayGoal ?? memoryContext?.userPreferences?.defaultGoal;
+
+    if (resolvedPreviousProgress !== undefined) {
+      session.inputs.previousProgressMemory = resolvedPreviousProgress;
+    }
+    if (resolvedTodayGoal !== undefined) {
+      session.inputs.todayGoal = resolvedTodayGoal;
+    }
 
     await runAnalyzeCodeChange({
       session,
@@ -224,11 +326,21 @@ export class AnalysisHarness {
       includeVideoScript,
       includePrDescription,
       includeDailyUpdate,
+      includeDailyWorkGuidance,
+      includeTechnicalChangeBrief,
+      includeDemoPrepLoop,
+      includeWeeklyReview,
     });
 
     this.store.save(session);
 
-    if (session.projectId !== undefined) {
+    // Attach only to a project that actually exists in the project store. A
+    // projectId can also be a memory key that was never registered as a project
+    // (e.g. from the UI), so a missing project is not an error here.
+    if (
+      session.projectId !== undefined &&
+      this.projectStore.getProject({ projectId: session.projectId }) !== undefined
+    ) {
       this.projectStore.attachSessionToProject({
         projectId: session.projectId,
         sessionId: session.sessionId,
@@ -247,28 +359,42 @@ export class AnalysisHarness {
    */
   async runAnalysisFromGit({
     projectId,
+    userId,
     repoPath,
     baseRef,
     headRef,
     requirementText,
     sessionId,
+    previousProgressMemory,
+    todayGoal,
     includeFlow,
     includeGapReport,
     includeVideoScript,
     includePrDescription,
     includeDailyUpdate,
+    includeDailyWorkGuidance,
+    includeTechnicalChangeBrief,
+    includeDemoPrepLoop,
+    includeWeeklyReview,
   }: {
     projectId?: string;
+    userId?: string;
     repoPath: string;
     baseRef?: string;
     headRef?: string;
     requirementText: string;
     sessionId?: string;
+    previousProgressMemory?: string;
+    todayGoal?: string;
     includeFlow?: boolean;
     includeGapReport?: boolean;
     includeVideoScript?: boolean;
     includePrDescription?: boolean;
     includeDailyUpdate?: boolean;
+    includeDailyWorkGuidance?: boolean;
+    includeTechnicalChangeBrief?: boolean;
+    includeDemoPrepLoop?: boolean;
+    includeWeeklyReview?: boolean;
   }): Promise<AnalysisResult> {
     const gitInput = await this.gitInputAdapter.execute({
       repoPath,
@@ -281,12 +407,19 @@ export class AnalysisHarness {
       rawDiff: gitInput.rawDiff,
       requirementText: gitInput.requirementText,
       ...(projectId !== undefined ? { projectId } : {}),
+      ...(userId !== undefined ? { userId } : {}),
       ...(sessionId !== undefined ? { sessionId } : {}),
+      ...(previousProgressMemory !== undefined ? { previousProgressMemory } : {}),
+      ...(todayGoal !== undefined ? { todayGoal } : {}),
       ...(includeFlow !== undefined ? { includeFlow } : {}),
       ...(includeGapReport !== undefined ? { includeGapReport } : {}),
       ...(includeVideoScript !== undefined ? { includeVideoScript } : {}),
       ...(includePrDescription !== undefined ? { includePrDescription } : {}),
       ...(includeDailyUpdate !== undefined ? { includeDailyUpdate } : {}),
+      ...(includeDailyWorkGuidance !== undefined ? { includeDailyWorkGuidance } : {}),
+      ...(includeTechnicalChangeBrief !== undefined ? { includeTechnicalChangeBrief } : {}),
+      ...(includeDemoPrepLoop !== undefined ? { includeDemoPrepLoop } : {}),
+      ...(includeWeeklyReview !== undefined ? { includeWeeklyReview } : {}),
     });
   }
 
@@ -299,30 +432,44 @@ export class AnalysisHarness {
    */
   async runAnalysisFromNotion({
     projectId,
+    userId,
     rawDiff,
     rawText,
     notionPageId,
     notionUrl,
     title,
     sessionId,
+    previousProgressMemory,
+    todayGoal,
     includeFlow,
     includeGapReport,
     includeVideoScript,
     includePrDescription,
     includeDailyUpdate,
+    includeDailyWorkGuidance,
+    includeTechnicalChangeBrief,
+    includeDemoPrepLoop,
+    includeWeeklyReview,
   }: {
     projectId?: string;
+    userId?: string;
     rawDiff: string;
     rawText?: string;
     notionPageId?: string;
     notionUrl?: string;
     title?: string;
     sessionId?: string;
+    previousProgressMemory?: string;
+    todayGoal?: string;
     includeFlow?: boolean;
     includeGapReport?: boolean;
     includeVideoScript?: boolean;
     includePrDescription?: boolean;
     includeDailyUpdate?: boolean;
+    includeDailyWorkGuidance?: boolean;
+    includeTechnicalChangeBrief?: boolean;
+    includeDemoPrepLoop?: boolean;
+    includeWeeklyReview?: boolean;
   }): Promise<AnalysisResult> {
     const requirement = await this.notionPlugin.input.execute({
       ...(rawText !== undefined ? { rawText } : {}),
@@ -335,12 +482,19 @@ export class AnalysisHarness {
       rawDiff,
       requirementText: requirement.requirementText,
       ...(projectId !== undefined ? { projectId } : {}),
+      ...(userId !== undefined ? { userId } : {}),
       ...(sessionId !== undefined ? { sessionId } : {}),
+      ...(previousProgressMemory !== undefined ? { previousProgressMemory } : {}),
+      ...(todayGoal !== undefined ? { todayGoal } : {}),
       ...(includeFlow !== undefined ? { includeFlow } : {}),
       ...(includeGapReport !== undefined ? { includeGapReport } : {}),
       ...(includeVideoScript !== undefined ? { includeVideoScript } : {}),
       ...(includePrDescription !== undefined ? { includePrDescription } : {}),
       ...(includeDailyUpdate !== undefined ? { includeDailyUpdate } : {}),
+      ...(includeDailyWorkGuidance !== undefined ? { includeDailyWorkGuidance } : {}),
+      ...(includeTechnicalChangeBrief !== undefined ? { includeTechnicalChangeBrief } : {}),
+      ...(includeDemoPrepLoop !== undefined ? { includeDemoPrepLoop } : {}),
+      ...(includeWeeklyReview !== undefined ? { includeWeeklyReview } : {}),
     });
   }
 
@@ -396,6 +550,169 @@ export class AnalysisHarness {
     return this.store.get(sessionId);
   }
 
+  /**
+   * Load the developer memory context for a run. Fails OPEN: memory is only
+   * supporting context, so a load error (e.g. a corrupted record) must never
+   * crash an analysis — it is treated as "no memory". Returns undefined when no
+   * project id is given (nothing project-scoped to load).
+   */
+  private async loadMemoryContext({
+    userId,
+    projectId,
+  }: {
+    userId: string | undefined;
+    projectId: string | undefined;
+  }): Promise<DeveloperMemoryContext | undefined> {
+    if (projectId === undefined) return undefined;
+    const resolvedUserId = userId ?? DEFAULT_USER_ID;
+    try {
+      const [userPreferences, projectMemory] = await Promise.all([
+        this.memoryStore.getUserMemory({ userId: resolvedUserId }),
+        this.memoryStore.getProjectMemory({ userId: resolvedUserId, projectId }),
+      ]);
+      return buildDeveloperMemoryContext({
+        userId: resolvedUserId,
+        projectId,
+        ...(userPreferences !== undefined ? { userMemory: userPreferences } : {}),
+        ...(projectMemory !== undefined ? { projectMemory } : {}),
+      });
+    } catch {
+      // Fail open: memory is supporting context, not a source of truth.
+      return undefined;
+    }
+  }
+
+  /**
+   * Assemble the developer memory context for preview/UI without running an
+   * analysis. Surfaces load errors via the MemoryStore (does not fail open).
+   */
+  async getDeveloperMemoryContext({
+    userId,
+    projectId,
+  }: {
+    userId?: string;
+    projectId: string;
+  }): Promise<DeveloperMemoryContext> {
+    const resolvedUserId = userId ?? DEFAULT_USER_ID;
+    const [userPreferences, projectMemory] = await Promise.all([
+      this.memoryStore.getUserMemory({ userId: resolvedUserId }),
+      this.memoryStore.getProjectMemory({ userId: resolvedUserId, projectId }),
+    ]);
+    return buildDeveloperMemoryContext({
+      userId: resolvedUserId,
+      projectId,
+      ...(userPreferences !== undefined ? { userMemory: userPreferences } : {}),
+      ...(projectMemory !== undefined ? { projectMemory } : {}),
+    });
+  }
+
+  getUserMemory({ userId }: { userId?: string }): Promise<UserPreferencesMemory | undefined> {
+    return this.memoryStore.getUserMemory({ userId: userId ?? DEFAULT_USER_ID });
+  }
+
+  saveUserMemory({
+    userId,
+    memory,
+  }: {
+    userId?: string;
+    memory: UserPreferencesMemory;
+  }): Promise<void> {
+    return this.memoryStore.saveUserMemory({ userId: userId ?? DEFAULT_USER_ID, memory });
+  }
+
+  getProjectMemory({
+    userId,
+    projectId,
+  }: {
+    userId?: string;
+    projectId: string;
+  }): Promise<ProjectMemory | undefined> {
+    return this.memoryStore.getProjectMemory({ userId: userId ?? DEFAULT_USER_ID, projectId });
+  }
+
+  saveProjectMemory({
+    userId,
+    projectId,
+    memory,
+  }: {
+    userId?: string;
+    projectId: string;
+    memory: ProjectMemory;
+  }): Promise<void> {
+    return this.memoryStore.saveProjectMemory({
+      userId: userId ?? DEFAULT_USER_ID,
+      projectId,
+      memory,
+    });
+  }
+
+  /**
+   * Explicit, user-confirmed save path: turn a run's Daily Work Guidance memory
+   * update into a durable project snapshot and persist it (appending the prior
+   * snapshot to history). Never called automatically — model output is only
+   * saved when the user asks. Returns the stored ProjectMemory.
+   */
+  async saveProjectMemoryFromGuidance({
+    userId,
+    projectId,
+    guidance,
+    now,
+  }: {
+    userId?: string;
+    projectId: string;
+    guidance: DailyWorkGuidance;
+    now?: string;
+  }): Promise<ProjectMemory> {
+    const resolvedUserId = userId ?? DEFAULT_USER_ID;
+    const snapshot = snapshotFromDailyWorkGuidance(guidance);
+    const existing = await this.memoryStore.getProjectMemory({
+      userId: resolvedUserId,
+      projectId,
+    });
+    const memory = appendSnapshot({
+      userId: resolvedUserId,
+      projectId,
+      snapshot,
+      ...(existing !== undefined ? { existing } : {}),
+      ...(now !== undefined ? { now } : {}),
+    });
+    await this.memoryStore.saveProjectMemory({ userId: resolvedUserId, projectId, memory });
+    return memory;
+  }
+
+  /**
+   * Explicit save path for a Weekly Review's memory update proposal — mirrors
+   * `saveProjectMemoryFromGuidance`. Never called automatically; the weekly
+   * summary/decisions/blockers/next-actions become a durable project snapshot.
+   */
+  async saveProjectMemoryFromWeeklyReview({
+    userId,
+    projectId,
+    weeklyReview,
+    now,
+  }: {
+    userId?: string;
+    projectId: string;
+    weeklyReview: WeeklyReview;
+    now?: string;
+  }): Promise<ProjectMemory> {
+    const resolvedUserId = userId ?? DEFAULT_USER_ID;
+    const snapshot = snapshotFromWeeklyReview(weeklyReview);
+    const existing = await this.memoryStore.getProjectMemory({
+      userId: resolvedUserId,
+      projectId,
+    });
+    const memory = appendSnapshot({
+      userId: resolvedUserId,
+      projectId,
+      snapshot,
+      ...(existing !== undefined ? { existing } : {}),
+      ...(now !== undefined ? { now } : {}),
+    });
+    await this.memoryStore.saveProjectMemory({ userId: resolvedUserId, projectId, memory });
+    return memory;
+  }
+
   private loadOrCreateSession({
     rawDiff,
     sessionId,
@@ -404,26 +721,73 @@ export class AnalysisHarness {
     rawDiff: string;
     sessionId: string | undefined;
     projectId: string | undefined;
-  }): AnalysisSession {
+  }): { session: AnalysisSession; reused: boolean } {
     if (sessionId !== undefined) {
       const existing = this.store.get(sessionId);
       if (existing !== undefined) {
         if (projectId !== undefined) {
           existing.projectId = projectId;
         }
-        return existing;
+        return { session: existing, reused: true };
       }
     }
 
     const now = new Date().toISOString();
     return {
-      sessionId: sessionId ?? randomUUID(),
-      ...(projectId !== undefined ? { projectId } : {}),
-      inputs: { rawDiff },
-      artifacts: {},
-      status: { currentStep: undefined, completedSteps: [], failedSteps: [] },
-      metadata: { createdAt: now, updatedAt: now, diffHash: hashString(rawDiff) },
+      session: {
+        sessionId: sessionId ?? randomUUID(),
+        ...(projectId !== undefined ? { projectId } : {}),
+        inputs: { rawDiff },
+        artifacts: {},
+        status: { currentStep: undefined, completedSteps: [], failedSteps: [] },
+        metadata: { createdAt: now, updatedAt: now, diffHash: hashString(rawDiff) },
+      },
+      reused: false,
     };
+  }
+
+  /**
+   * Guard against silently returning a stale analysis. A reused session must
+   * describe the SAME inputs it was analyzed for; otherwise the workflow would
+   * skip already-present steps and hand back an analysis that belongs to a
+   * different diff/requirement. Fails closed with SESSION_INPUT_MISMATCH so the
+   * caller starts a new session (omit `sessionId`) for different inputs.
+   *
+   * The requirement is compared on its NORMALIZED identity — the incoming text
+   * is run through the same requirement adapter used to populate the session —
+   * so cosmetic differences (e.g. surrounding whitespace) are not treated as a
+   * mismatch. Comparisons are skipped when the stored value is absent (nothing
+   * stale to protect yet); those steps simply run fresh.
+   */
+  private async assertReusedSessionInputsMatch({
+    session,
+    rawDiff,
+    requirementText,
+  }: {
+    session: AnalysisSession;
+    rawDiff: string;
+    requirementText: string;
+  }): Promise<void> {
+    const storedDiffHash = session.metadata.diffHash;
+    if (storedDiffHash !== undefined && storedDiffHash !== hashString(rawDiff)) {
+      throw new HarnessError(
+        'SESSION_INPUT_MISMATCH',
+        `Session "${session.sessionId}" was analyzed for a different code diff. ` +
+          'Reusing a session requires identical inputs; start a new session (omit sessionId) to analyze a different diff.',
+      );
+    }
+
+    const storedRequirement = session.inputs.requirementInput;
+    if (storedRequirement !== undefined) {
+      const normalized = await this.requirementAdapter.execute({ requirementText });
+      if (normalized.requirementText !== storedRequirement.requirementText) {
+        throw new HarnessError(
+          'SESSION_INPUT_MISMATCH',
+          `Session "${session.sessionId}" was analyzed for a different requirement. ` +
+            'Reusing a session requires identical inputs; start a new session (omit sessionId) to analyze a different requirement.',
+        );
+      }
+    }
   }
 
   private toResult(session: AnalysisSession): AnalysisResult {
@@ -462,6 +826,18 @@ export class AnalysisHarness {
     }
     if (session.artifacts.dailyUpdate !== undefined) {
       result.dailyUpdate = session.artifacts.dailyUpdate;
+    }
+    if (session.artifacts.dailyWorkGuidance !== undefined) {
+      result.dailyWorkGuidance = session.artifacts.dailyWorkGuidance;
+    }
+    if (session.artifacts.technicalChangeBrief !== undefined) {
+      result.technicalChangeBrief = session.artifacts.technicalChangeBrief;
+    }
+    if (session.artifacts.demoPrepLoop !== undefined) {
+      result.demoPrepLoop = session.artifacts.demoPrepLoop;
+    }
+    if (session.artifacts.weeklyReview !== undefined) {
+      result.weeklyReview = session.artifacts.weeklyReview;
     }
 
     return result;

@@ -14,43 +14,33 @@ import {
   MockLanguageModel,
 } from '../src/index.js';
 
-const diff = `diff --git a/src/harness/CodeUnderstandingHarness.ts b/src/harness/CodeUnderstandingHarness.ts
---- a/src/harness/CodeUnderstandingHarness.ts
-+++ b/src/harness/CodeUnderstandingHarness.ts
-@@ -1,5 +1,6 @@
- import type { HarnessSkills, SessionInputs } from '../types/index.js';
-+import { SessionStore } from './SessionStore.js';
+const diff = `diff --git a/src/cache/TtlCache.ts b/src/cache/TtlCache.ts
+--- a/src/cache/TtlCache.ts
++++ b/src/cache/TtlCache.ts
+@@ -1,8 +1,12 @@
+ export class TtlCache<T> {
+-  private store = new Map<string, T>();
++  private store = new Map<string, { value: T; expiresAt: number }>();
 
- export class CodeUnderstandingHarness {
--  private state: Map<string, unknown> = new Map();
-+  private store?: SessionStore;
-
-   async start(inputs: SessionInputs): Promise<void> {
--    this.state.set('inputs', inputs);
-+    this.store = new SessionStore(inputs);
+-  get(key: string): T | undefined {
+-    return this.store.get(key);
++  get(key: string): T | undefined {
++    const entry = this.store.get(key);
++    if (entry === undefined) return undefined;
++    if (entry.expiresAt <= Date.now()) {
++      this.store.delete(key);
++      return undefined;
++    }
++    return entry.value;
    }
  }
-diff --git a/src/harness/SessionStore.ts b/src/harness/SessionStore.ts
+diff --git a/src/cache/ttl.ts b/src/cache/ttl.ts
 new file mode 100644
 --- /dev/null
-+++ b/src/harness/SessionStore.ts
-@@ -0,0 +1,20 @@
-+import type { SessionInputs, SessionState } from '../types/index.js';
-+
-+export class SessionStore {
-+  private state: SessionState;
-+
-+  constructor(inputs: SessionInputs) {
-+    this.state = { inputs, phase: 'created', outputs: {} };
-+  }
-+
-+  get inputs(): SessionInputs {
-+    return { ...this.state.inputs };
-+  }
-+
-+  snapshot(): SessionState {
-+    return structuredClone(this.state);
-+  }
++++ b/src/cache/ttl.ts
+@@ -0,0 +1,6 @@
++export function withTtl<T>(value: T, ttlMs: number): { value: T; expiresAt: number } {
++  return { value, expiresAt: Date.now() + ttlMs };
 +}`;
 
 async function main(): Promise<void> {

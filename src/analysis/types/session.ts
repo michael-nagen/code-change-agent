@@ -16,6 +16,10 @@ import type { FlowArtifact } from '../../skills/flowGeneration/index.js';
 import type { PRDescription } from '../../skills/prDescription/index.js';
 import type { VideoScript } from '../../skills/videoScript/index.js';
 import type { DailyUpdate } from '../../skills/dailyUpdate/index.js';
+import type { DailyWorkGuidance } from '../../skills/dailyWorkGuidance/index.js';
+import type { TechnicalChangeBrief } from '../../skills/technicalChangeBrief/index.js';
+import type { DemoPrepLoop } from '../../skills/demoPrepLoop/index.js';
+import type { WeeklyReview } from '../../skills/weeklyReview/index.js';
 
 /** The ordered steps of the AnalyzeCodeChange workflow. */
 export type WorkflowStepName =
@@ -26,7 +30,11 @@ export type WorkflowStepName =
   | 'gapReport'
   | 'videoScript'
   | 'prDescription'
-  | 'dailyUpdate';
+  | 'dailyUpdate'
+  | 'dailyWorkGuidance'
+  | 'technicalChangeBrief'
+  | 'demoPrepLoop'
+  | 'weeklyReview';
 
 /**
  * Raw inputs for a session. `requirementInput` is populated once the manual
@@ -35,6 +43,13 @@ export type WorkflowStepName =
 export interface AnalysisInputs {
   rawDiff: string;
   requirementInput?: RequirementInput;
+  /**
+   * Previous progress memory carried in from an earlier session, used by the
+   * daily-work-guidance step to tell what advanced. Optional guidance input.
+   */
+  previousProgressMemory?: string;
+  /** An optional goal for today, forwarded to the daily-work-guidance step. */
+  todayGoal?: string;
 }
 
 /**
@@ -50,6 +65,10 @@ export interface AnalysisArtifacts {
   prDescription?: PRDescription;
   videoScript?: VideoScript;
   dailyUpdate?: DailyUpdate;
+  dailyWorkGuidance?: DailyWorkGuidance;
+  technicalChangeBrief?: TechnicalChangeBrief;
+  demoPrepLoop?: DemoPrepLoop;
+  weeklyReview?: WeeklyReview;
 }
 
 /**

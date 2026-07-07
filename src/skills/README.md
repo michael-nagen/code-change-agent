@@ -1,27 +1,37 @@
 # Skills
 
-Skills are where **all business reasoning** lives. The Harness depends only on
-the interfaces in `src/types/skills.ts`, never on concrete implementations.
+Skills are where **all business reasoning** lives. The `AnalysisHarness`
+(`src/analysis/`) depends only on the skill interfaces (e.g.
+`ChangeExplanationSkill`, `GapReportSkill`), never on concrete implementations.
 
-## V1
+Each skill follows the same shape: `buildPrompt → LanguageModel.generate →
+parseOutput`, and fails closed on invalid model output.
 
-Only mock implementations exist (see `mocks/`). They return fake, deterministic
-data. Their sole purpose is to validate the Harness architecture and workflow.
+## Mocks
 
-## Adding a real skill
+Provider-free test doubles live in `mocks/` (`MockLanguageModel`,
+`FakeLanguageModel`, `MockArtifactEditSkill`). They return deterministic data so
+the harness, workflow, and UI can be exercised without a live model.
 
-Implement the relevant interface and inject it via the Harness constructor:
+## Adding a real (or test) skill
+
+Implement the relevant `LanguageModel`-backed skill and inject it via the
+harness constructor. Inject a single shared `model` to construct the default
+skills, or override any individual skill:
 
 ```ts
-new CodeUnderstandingHarness({ changeUnderstanding: new RealChangeUnderstandingSkill() });
+new AnalysisHarness({ model }); // default LLM-backed skills
+new AnalysisHarness({ changeExplanation: new DefaultChangeExplanationSkill(model) });
 ```
 
-## Adding a new output generator (future)
+## Adding a new output skill
 
-1. Add the output key to `SessionOutputs` in `src/types/session.ts`.
-2. Implement `OutputGenerator` for that key.
-3. Register it: `harness.registerGenerator(new VideoScriptGenerator())`,
-   or pass it in `skills.generators` at construction.
+1. Add the artifact key to the analysis session/result types in
+   `src/analysis/types/`.
+2. Implement the skill (prompt + parser) under `src/skills/<name>/`.
+3. Add a step to `src/analysis/workflowDefinition.ts` (order, dependencies, and
+   its `includeFlag`) and register it in `AnalysisHarness`.
 
-The Harness needs **no changes** — `generate(key)` handles any registered
-generator uniformly.
+The workflow runner reuses already-computed artifacts automatically, so a newly
+added optional output slots into the "analyze once" caching without special
+handling.

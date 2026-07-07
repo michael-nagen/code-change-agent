@@ -16,6 +16,10 @@ export interface AnalysisIncludeFlags {
   includeVideoScript: boolean;
   includePrDescription: boolean;
   includeDailyUpdate: boolean;
+  includeDailyWorkGuidance: boolean;
+  includeTechnicalChangeBrief: boolean;
+  includeDemoPrepLoop: boolean;
+  includeWeeklyReview: boolean;
 }
 
 /**

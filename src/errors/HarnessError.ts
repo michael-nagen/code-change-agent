@@ -6,7 +6,8 @@ export type HarnessErrorCode =
   | 'VALIDATION'
   | 'INVALID_PHASE'
   | 'UNKNOWN_GENERATOR'
-  | 'UNKNOWN_SKILL';
+  | 'UNKNOWN_SKILL'
+  | 'SESSION_INPUT_MISMATCH';
 
 export class HarnessError extends Error {
   readonly code: HarnessErrorCode;

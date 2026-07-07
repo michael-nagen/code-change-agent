@@ -23,6 +23,10 @@ function submission(overrides: Partial<FormSubmission>): FormSubmission {
     includePrDescription: false,
     includeVideoScript: false,
     includeDailyUpdate: false,
+    includeDailyWorkGuidance: false,
+    includeTechnicalChangeBrief: false,
+    includeDemoPrepLoop: false,
+    includeWeeklyReview: false,
     ...overrides,
   };
 }

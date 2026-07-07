@@ -12,6 +12,10 @@ import type { FlowArtifact } from '../../skills/flowGeneration/index.js';
 import type { PRDescription } from '../../skills/prDescription/index.js';
 import type { VideoScript } from '../../skills/videoScript/index.js';
 import type { DailyUpdate } from '../../skills/dailyUpdate/index.js';
+import type { DailyWorkGuidance } from '../../skills/dailyWorkGuidance/index.js';
+import type { TechnicalChangeBrief } from '../../skills/technicalChangeBrief/index.js';
+import type { DemoPrepLoop } from '../../skills/demoPrepLoop/index.js';
+import type { WeeklyReview } from '../../skills/weeklyReview/index.js';
 
 export interface AnalysisResult {
   sessionId: string;
@@ -28,4 +32,12 @@ export interface AnalysisResult {
   videoScript?: VideoScript;
   /** Present when the optional daily-update step ran. */
   dailyUpdate?: DailyUpdate;
+  /** Present when the optional daily-work-guidance step ran. */
+  dailyWorkGuidance?: DailyWorkGuidance;
+  /** Present when the optional technical-change-brief step ran. */
+  technicalChangeBrief?: TechnicalChangeBrief;
+  /** Present when the optional demo-prep-loop step ran. */
+  demoPrepLoop?: DemoPrepLoop;
+  /** Present when the optional weekly-review step ran. */
+  weeklyReview?: WeeklyReview;
 }

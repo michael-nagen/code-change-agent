@@ -60,6 +60,10 @@ export function parseFormSubmission(body: unknown): FormSubmission {
     includePrDescription: asBool(body.includePrDescription),
     includeVideoScript: asBool(body.includeVideoScript),
     includeDailyUpdate: asBool(body.includeDailyUpdate),
+    includeDailyWorkGuidance: asBool(body.includeDailyWorkGuidance),
+    includeTechnicalChangeBrief: asBool(body.includeTechnicalChangeBrief),
+    includeDemoPrepLoop: asBool(body.includeDemoPrepLoop),
+    includeWeeklyReview: asBool(body.includeWeeklyReview),
   };
 
   if (projectName !== '') {

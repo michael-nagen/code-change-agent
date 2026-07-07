@@ -30,3 +30,14 @@ export type {
   NotionArtifacts,
   NotionPlugin,
 } from './notion/index.js';
+
+export {
+  DefaultPresentationDeckBuilderTool,
+  buildMarkdownDeck,
+} from './presentation/index.js';
+export type {
+  DeckMetadata,
+  MarkdownDeckInput,
+  MarkdownDeckResult,
+  PresentationDeckBuilderTool,
+} from './presentation/index.js';

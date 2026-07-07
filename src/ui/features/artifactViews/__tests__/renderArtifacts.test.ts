@@ -72,6 +72,331 @@ function fullResult(): AnalysisResult {
     highlightedTopic: { title: 'TTL', explanation: 'expires', whyItMatters: 'freshness' },
     spokenVersion: 'Yesterday I built the cache.',
   };
+  r.dailyWorkGuidance = {
+    yesterdaySummary: 'Implemented the cache read path.',
+    progressVsSpec: [
+      {
+        item: 'Cache with TTL',
+        previousStatus: 'missing',
+        whatChanged: 'Added a cache with TTL.',
+        newStatus: 'partial',
+        evidence: 'Change explanation adds a cache.',
+        confidence: 'medium',
+      },
+    ],
+    advancedChecklistItems: [
+      {
+        item: 'Cache with TTL',
+        previousStatus: 'missing',
+        newStatus: 'partial',
+        whatAdvanced: 'Cache scaffolding landed.',
+        evidence: 'Change explanation.',
+      },
+    ],
+    blockersAndRisks: [
+      {
+        title: 'Memory growth',
+        description: 'Unbounded cache.',
+        whyItMatters: 'Could leak memory.',
+        requiredAction: 'Add an eviction policy.',
+        severity: 'medium',
+      },
+    ],
+    decisionsNeedingApproval: [
+      {
+        decision: 'Eviction strategy',
+        context: 'No eviction yet.',
+        options: ['LRU', 'TTL-only'],
+        recommendedOption: 'LRU',
+        status: 'pending_approval',
+      },
+    ],
+    plannedSteps: [
+      {
+        id: 'step-1',
+        title: 'Add eviction',
+        whyItMatters: 'Bounds memory.',
+        expectedOutput: 'Cache evicts entries.',
+        cursorPrompt: 'Implement LRU eviction in the Cache component.',
+        validationChecklist: ['Cache size stays bounded.'],
+        relatedSpecItems: ['Cache with TTL'],
+        status: 'pending_approval',
+      },
+    ],
+    notionDailyUpdate: {
+      yesterday: 'Built the cache.',
+      today: 'Add eviction.',
+      blockers: 'Memory growth.',
+      decisionsNeeded: 'Eviction strategy.',
+      progressVsSpec: 'Cache partial.',
+      nextCursorPrompt: 'Implement LRU eviction in the Cache component.',
+    },
+    memoryUpdate: {
+      date: '2026-07-07',
+      dailySummary: 'Cache scaffolding landed; eviction pending.',
+      updatedChecklistStatuses: [{ item: 'Cache with TTL', status: 'partial' }],
+      newDecisions: ['Eviction strategy'],
+      openBlockers: ['Memory growth'],
+      nextActions: ['Add eviction'],
+    },
+  };
+  r.technicalChangeBrief = {
+    executiveSummary: 'Adds an in-memory cache with a TTL.',
+    dataSchemaChanges: {
+      hasChanges: true,
+      summary: 'A new CacheEntry shape was introduced.',
+      newFields: [
+        {
+          name: 'expiresAt',
+          filePath: 'src/cache.ts',
+          description: 'Expiry timestamp.',
+          evidence: 'confirmed',
+        },
+      ],
+      changedFields: [],
+      removedFields: [],
+      newSchemas: [],
+      changedParserContracts: [],
+      newStatusValues: [],
+      persistedDataImpact: 'No persisted data affected.',
+      backwardCompatibility: 'compatible',
+      backwardCompatibilityNote: 'Additive only.',
+    },
+    modelsAndTypes: [
+      {
+        name: 'CacheEntry',
+        filePath: 'src/cache.ts',
+        represents: 'A cached value with expiry.',
+        whyNeeded: 'To store a TTL alongside the value.',
+        importantFields: ['expiresAt: expiry time'],
+        evidence: 'confirmed',
+      },
+    ],
+    inputsApiFlags: [
+      {
+        name: 'includeCache',
+        kind: 'includeFlag',
+        description: 'Turns the cache on.',
+        evidence: 'inferred',
+      },
+    ],
+    workflowRuntimeChanges: {
+      summary: 'A cache lookup runs before the read path.',
+      whereItRuns: 'At the start of the read path.',
+      dependsOn: ['Read path'],
+      consumesArtifacts: ['None'],
+      producesArtifact: 'None',
+      cachedOrReused: 'Values reused until expiry.',
+      behaviorWhenFlagOff: 'Reads go to the source.',
+    },
+    uiChanges: {
+      hasChanges: false,
+      summary: 'No UI changes in this diff.',
+      newCardsOrViews: [],
+      togglesOrButtons: [],
+      copyActions: [],
+      sectionsDisplayed: [],
+      howToActivate: 'not visible from the provided diff/analysis',
+    },
+    interestingFunctionality: [
+      {
+        title: 'TTL expiry check',
+        whatItDoes: 'Skips stale entries.',
+        whyItMatters: 'Keeps data fresh.',
+        howItWorks: 'Compares expiresAt to now.',
+        filesInvolved: ['src/cache.ts'],
+      },
+    ],
+    howItWorksStepByStep: [
+      { actor: 'Caller', action: 'Requests a value.' },
+      { action: 'Cache returns a fresh value or stores one.', detail: 'Checks expiresAt.' },
+    ],
+    filesWorthShowing: [
+      {
+        path: 'src/cache.ts',
+        whyItMatters: 'Holds the cache and TTL logic.',
+        whatToPointOut: 'The expiry check.',
+      },
+    ],
+    talkingPoints: ['We added an in-memory cache with a TTL.'],
+  };
+  r.demoPrepLoop = {
+    loopStatus: {
+      currentStage: 'Initial demo plan proposed.',
+      overallStatus: 'pending_user_review',
+      nextRecommendedAction: 'Review the walkthrough order.',
+      whatNeedsUserApproval: ['Demo story'],
+    },
+    demoStoryProposal: {
+      problem: 'Reads were slow.',
+      solution: 'An in-memory cache with a TTL.',
+      technicalChange: 'A CacheEntry shape with expiry.',
+      userOrProductValue: 'Faster reads without stale data.',
+      proofOrDemoMoment: 'A repeated read returns instantly.',
+      limitationsOrNextSteps: 'In-memory only.',
+      status: 'pending_approval',
+    },
+    walkthroughOrder: [
+      {
+        order: 1,
+        title: 'The CacheEntry contract',
+        filePath: 'src/cache.ts',
+        type: 'code',
+        whyThisComesHere: 'The data contract anchors the story.',
+        whatToShow: 'The CacheEntry interface.',
+        whatToSay: 'Every cached value carries its own expiry.',
+        whatToSkip: 'The map plumbing.',
+        relatedFeatureOrConcept: 'TTL cache',
+        estimatedTimeSeconds: 45,
+        mustShow: true,
+        evidence: 'confirmed',
+        status: 'pending_approval',
+      },
+    ],
+    codeEvidencePlan: [
+      {
+        filePath: 'src/cache.ts',
+        evidenceType: 'schema',
+        whatItProves: 'The TTL is part of the stored shape.',
+        whyItMatters: 'Expiry is designed in.',
+        confidence: 'high',
+        evidence: 'confirmed',
+        status: 'pending_approval',
+      },
+    ],
+    screenshotPlan: [
+      {
+        id: 'shot-1',
+        title: 'CacheEntry interface',
+        type: 'code',
+        filePath: 'src/cache.ts',
+        whatToCapture: 'The CacheEntry interface with expiresAt.',
+        whyThisMatters: 'It is the core data contract.',
+        whatToSay: 'This is the cached shape.',
+        whatToSkip: 'Imports.',
+        relatedFeatureOrConcept: 'TTL cache',
+        estimatedTimeSeconds: 30,
+        mustShow: true,
+        suggestedCaption: 'The new CacheEntry shape with TTL',
+        evidence: 'confirmed',
+        status: 'pending_approval',
+      },
+    ],
+    approvalQuestions: [
+      {
+        question: 'Focus on the read path or the data contract?',
+        whyItMatters: 'It changes which slides carry the story.',
+        options: ['Read path', 'Data contract'],
+        recommendedOption: 'Data contract',
+        status: 'pending_approval',
+      },
+    ],
+    deckPlan: [
+      {
+        slideNumber: 1,
+        title: 'The cache entry model',
+        purpose: 'Prove the schema change is real.',
+        visualType: 'code_screenshot',
+        screenshotIds: ['shot-1'],
+        whatToShow: 'The CacheEntry screenshot.',
+        onSlideText: ['One new type', 'TTL built in'],
+        speakerNotes: 'Walk through each field.',
+        narrationScript: 'This is the CacheEntry shape.',
+        transitionToNextSlide: 'Now the read path.',
+        estimatedTimeSeconds: 45,
+        mustHave: true,
+        status: 'draft',
+      },
+    ],
+    draftVideoScript: {
+      title: 'Adding a TTL cache',
+      estimatedDuration: '5-7 minutes',
+      sections: [
+        {
+          kind: 'opening',
+          title: 'What this video covers',
+          narration: 'I walk through the new TTL cache.',
+          visualCue: 'Title slide.',
+          estimatedTimeSeconds: 30,
+        },
+      ],
+    },
+    finalShortPitch: 'We added an in-memory TTL cache so reads are fast and never stale.',
+    readinessChecklist: [
+      { item: 'Run tests', why: 'Prove the change is green.', done: false },
+    ],
+  };
+  r.weeklyReview = {
+    status: {
+      status: 'draft',
+      confidence: 'medium',
+      missingInputs: [],
+      reviewPeriodLabel: 'Week ending 2026-07-07',
+      generatedAt: '2026-07-07T09:00:00.000Z',
+    },
+    executiveSummary: 'Shipped the cache; eviction remains.',
+    progressAgainstSpec: [
+      {
+        title: 'Cache with TTL',
+        status: 'partial',
+        evidence: 'Cache added; eviction missing.',
+        notes: 'No conflict with memory.',
+        source: 'technical_brief',
+      },
+    ],
+    whatChangedTechnically: {
+      schemaOrDataChanges: [],
+      modelOrTypeChanges: [{ description: 'Added Cache type.', evidence: 'inferred' }],
+      workflowOrRuntimeChanges: [],
+      uiChanges: [],
+      toolsOrSkillsAdded: [],
+      importantFilesOrModules: ['src/cache.ts'],
+    },
+    keyDecisions: [
+      {
+        decision: 'Use an in-memory map.',
+        why: 'Simplest MVP.',
+        impact: 'No persistence.',
+        status: 'active',
+        source: 'current_run',
+      },
+    ],
+    blockersAndRisks: [
+      {
+        title: 'Unbounded memory',
+        whyItMatters: 'Could leak.',
+        status: 'open',
+        suggestedNextAction: 'Add eviction.',
+      },
+    ],
+    demoVideoStory: {
+      strongestStory: 'Reads are now fast and never stale.',
+      whatToShow: ['The cache hit path'],
+      whatToSay: ['Why TTL matters'],
+      whatToSkip: ['Wiring'],
+      recommendedStructure: [{ title: 'Intro', durationLabel: '~1 min', focus: 'The problem' }],
+      keyFilesOrScreens: ['src/cache.ts'],
+      strongestProductSentence: 'Fast reads, never stale.',
+    },
+    reviewTalkingPoints: ['I built a TTL cache.'],
+    suggestedWeeklyUpdate: {
+      thisWeek: 'Built the cache.',
+      technicalProgress: 'Cache added.',
+      demoProductProgress: 'Can demo fast reads.',
+      blockers: 'Unbounded memory.',
+      nextWeek: 'Add eviction.',
+    },
+    nextWeekPlan: ['Add LRU eviction.'],
+    memoryUpdateProposal: {
+      latestWeeklySummary: 'Cache shipped; eviction pending.',
+      updatedChecklistStatuses: [{ item: 'Cache with TTL', status: 'partial' }],
+      newDecisions: ['Use an in-memory map.'],
+      updatedBlockers: ['Unbounded memory'],
+      nextActions: ['Add eviction'],
+      demoStorySummary: 'Fast, fresh reads.',
+      filesWorthShowing: ['src/cache.ts'],
+    },
+  };
   return r;
 }
 
@@ -107,7 +432,14 @@ test('present artifacts are marked generated and render content', () => {
 
 test('absent optional artifacts show a friendly not-generated state (never an error)', () => {
   const cards = renderWorkspaceCards(baseResult());
-  for (const id of ['gapReport', 'flowArtifact', 'prDescription', 'videoScript', 'dailyUpdate']) {
+  for (const id of [
+    'gapReport',
+    'flowArtifact',
+    'prDescription',
+    'videoScript',
+    'dailyUpdate',
+    'demoPrepLoop',
+  ]) {
     const card = byId(cards, id);
     assert.equal(card.state, 'not_generated', `${id} should be not_generated`);
     assert.match(card.html, /hasn't been generated yet/);
@@ -129,6 +461,160 @@ test('PR Draft card carries copyable markdown text (and only it)', () => {
   for (const id of ['changeExplanation', 'gapReport', 'videoScript', 'dailyUpdate', 'rawJson']) {
     assert.equal(byId(cards, id).copyText, undefined, `${id} must not have copyText`);
   }
+});
+
+test('Daily Work Guidance renders its sections and pending-approval steps', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const g = byId(cards, 'dailyWorkGuidance');
+  assert.equal(g.label, 'Daily Work Guidance');
+  assert.equal(g.group, 'actions');
+  assert.equal(g.state, 'generated');
+  assert.match(g.html, /Yesterday Summary/);
+  assert.match(g.html, /Progress vs Spec/);
+  assert.match(g.html, /Decisions Needing Approval/);
+  assert.match(g.html, /Planned Steps/);
+  assert.match(g.html, /Pending approval/);
+  assert.match(g.html, /Implement LRU eviction/);
+});
+
+test('Daily Work Guidance offers full + Notion + per-prompt copy targets', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const g = byId(cards, 'dailyWorkGuidance');
+  assert.ok(g.copyText, 'should have full-artifact copyText');
+  assert.match(g.copyText, /# Daily Work Guidance/);
+  assert.ok(g.copyActions, 'should have extra copy targets');
+  const labels = g.copyActions.map((a) => a.label);
+  assert.ok(labels.includes('Notion daily'));
+  assert.ok(labels.some((l) => l.startsWith('Prompt: ')));
+  const notion = g.copyActions.find((a) => a.label === 'Notion daily');
+  assert.ok(notion);
+  assert.match(notion.text, /## Daily Update —/);
+  assert.match(notion.text, /### Next Cursor prompt/);
+});
+
+test('Technical Change Brief renders all ten sections', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const b = byId(cards, 'technicalChangeBrief');
+  assert.equal(b.label, 'Technical Change Brief');
+  assert.equal(b.group, 'actions');
+  assert.equal(b.state, 'generated');
+  assert.match(b.html, /Executive Summary/);
+  assert.match(b.html, /Data \/ Schema Changes/);
+  assert.match(b.html, /Models &amp; Types/);
+  assert.match(b.html, /Inputs \/ API \/ Flags/);
+  assert.match(b.html, /Workflow \/ Runtime Changes/);
+  assert.match(b.html, /UI Changes/);
+  assert.match(b.html, /Interesting Functionality Deep Dive/);
+  assert.match(b.html, /How It Works Step-by-Step/);
+  assert.match(b.html, /Files Worth Showing/);
+  assert.match(b.html, /Talking Points/);
+  assert.match(b.html, /CacheEntry/);
+});
+
+test('Technical Change Brief offers full + talking-points + files copy targets', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const b = byId(cards, 'technicalChangeBrief');
+  assert.ok(b.copyText, 'should have full-artifact copyText');
+  assert.match(b.copyText, /# Technical Change Brief/);
+  assert.ok(b.copyActions, 'should have extra copy targets');
+  const labels = b.copyActions.map((a) => a.label);
+  assert.ok(labels.includes('Talking points'));
+  assert.ok(labels.includes('Files worth showing'));
+  const talking = b.copyActions.find((a) => a.label === 'Talking points');
+  assert.ok(talking);
+  assert.match(talking.text, /## Talking points/);
+});
+
+test('Demo Prep Loop renders all ten sections and the manual-screenshot notice', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const d = byId(cards, 'demoPrepLoop');
+  assert.equal(d.label, 'Demo Prep Loop');
+  assert.equal(d.group, 'actions');
+  assert.equal(d.state, 'generated');
+  assert.match(d.html, /Loop Status/);
+  assert.match(d.html, /Demo Story Proposal/);
+  assert.match(d.html, /Recommended Walkthrough Order/);
+  assert.match(d.html, /Code Evidence Plan/);
+  assert.match(d.html, /Screenshot \/ Slide Plan/);
+  assert.match(d.html, /Approval Questions/);
+  assert.match(d.html, /Presentation Deck Plan/);
+  assert.match(d.html, /Draft Video Script/);
+  assert.match(d.html, /Final Short Pitch/);
+  assert.match(d.html, /Demo Readiness Checklist/);
+  // Major decisions stay pending and screenshots are planned, not captured.
+  assert.match(d.html, /Pending approval/);
+  assert.match(d.html, /planned, not captured/);
+  // Slide content is clearly separated from what the presenter says.
+  assert.match(d.html, /On slide:/);
+  assert.match(d.html, /Speaker notes:/);
+  assert.match(d.html, /Narration script:/);
+});
+
+test('Demo Prep Loop offers full + scoped + markdown-deck copy targets and a deck download', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const d = byId(cards, 'demoPrepLoop');
+  assert.ok(d.copyText, 'should have full-artifact copyText');
+  assert.match(d.copyText, /^# Demo Prep Loop/);
+  assert.ok(d.copyActions, 'should have extra copy targets');
+  const labels = d.copyActions.map((a) => a.label);
+  for (const label of [
+    'Walkthrough order',
+    'Screenshot plan',
+    'Deck plan',
+    'Speaker notes',
+    'Narration script',
+    'Short pitch',
+    'Markdown deck',
+  ]) {
+    assert.ok(labels.includes(label), `missing copy target ${label}`);
+  }
+  const deck = d.copyActions.find((a) => a.label === 'Markdown deck');
+  assert.ok(deck);
+  assert.match(deck.text, /^# Demo Deck/);
+  assert.match(deck.text, /\n---\n/);
+  assert.match(deck.text, /## Slide 1 — The cache entry model/);
+  assert.match(deck.text, /Screenshot placeholder: shot-1/);
+  assert.ok(d.downloadAction, 'should offer the deck as a download');
+  assert.equal(d.downloadAction.label, 'Download deck (.md)');
+  assert.equal(d.downloadAction.filename, 'demo-deck.md');
+  assert.equal(d.downloadAction.text, deck.text);
+});
+
+test('Weekly Review renders its major sections', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const r = byId(cards, 'weeklyReview');
+  assert.equal(r.label, 'Weekly Review');
+  assert.equal(r.group, 'actions');
+  assert.equal(r.state, 'generated');
+  assert.match(r.html, /Weekly Review Status/);
+  assert.match(r.html, /Executive Summary/);
+  assert.match(r.html, /Progress Against Spec/);
+  assert.match(r.html, /What Changed Technically/);
+  assert.match(r.html, /Demo \/ Video Story/);
+  assert.match(r.html, /Suggested Weekly Update/);
+  assert.match(r.html, /Next Week Plan/);
+  assert.match(r.html, /Memory Update Proposal/);
+});
+
+test('Weekly Review offers full + scoped copy targets', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const r = byId(cards, 'weeklyReview');
+  assert.ok(r.copyText);
+  assert.match(r.copyText, /# Weekly Review/);
+  assert.ok(r.copyActions);
+  const labels = r.copyActions.map((a) => a.label);
+  for (const expected of [
+    'Weekly update',
+    'Demo / video story',
+    'Talking points',
+    'Next week plan',
+    'Memory update proposal',
+  ]) {
+    assert.ok(labels.includes(expected), `missing copy action ${expected}`);
+  }
+  const update = r.copyActions.find((a) => a.label === 'Weekly update');
+  assert.ok(update);
+  assert.match(update.text, /## Weekly Update —/);
 });
 
 test('Feature Flow shows steps and Mermaid as code (no rendering library)', () => {

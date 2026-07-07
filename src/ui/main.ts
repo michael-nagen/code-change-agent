@@ -13,21 +13,25 @@
 import {
   AnalysisHarness,
   OpenAICompatibleLanguageModel,
+  resolveMemoryStore,
 } from '../index.js';
+import type { MemoryStore } from '../index.js';
 import { DefaultArtifactEditSkill, type ArtifactEditSkill } from '../skills/artifactEdit/index.js';
 import { MockArtifactEditSkill } from '../skills/mocks/index.js';
 import type { AnalysisRunner, UiMode } from './types.js';
 import { HarnessAnalysisRunner, MockAnalysisRunner } from './analysisRunner.js';
 import { createUiServer } from './server.js';
 
-function resolveRunner(): {
+function resolveRunner(memoryStore: MemoryStore): {
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill: ArtifactEditSkill;
 } {
   if (process.env.UI_MODE === 'real') {
     const model = OpenAICompatibleLanguageModel.fromEnv();
-    const harness = new AnalysisHarness({ model });
+    // The harness shares the SAME memory store as the save endpoint, so memory
+    // saved from the UI is loaded on the next run.
+    const harness = new AnalysisHarness({ model, memoryStore });
     return {
       runner: new HarnessAnalysisRunner(harness),
       mode: 'real',
@@ -43,8 +47,10 @@ function resolveRunner(): {
 
 function main(): void {
   const port = Number(process.env.PORT ?? 5173);
-  const { runner, mode, artifactEditSkill } = resolveRunner();
-  const server = createUiServer({ runner, mode, artifactEditSkill });
+  // Durable developer memory (JSON file store by default; see resolveMemoryStore).
+  const memoryStore = resolveMemoryStore();
+  const { runner, mode, artifactEditSkill } = resolveRunner(memoryStore);
+  const server = createUiServer({ runner, mode, artifactEditSkill, memoryStore });
 
   server.listen(port, () => {
     const tag = mode === 'mock' ? 'MOCK/DEMO (fake data)' : 'REAL engine';
