@@ -1,0 +1,32 @@
+{
+  "name": "code-change-understanding-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Harness (orchestration layer) for the Code Change Understanding Agent. MVP: Requirement + Diff -> Change Understanding -> Code Understanding Report.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "example": "tsx examples/runExample.ts",
+    "example:gitdiff": "tsx examples/runGitDiffExample.ts",
+    "example:change-explanation": "tsx examples/runChangeExplanationExample.ts",
+    "example:requirement-alignment": "tsx examples/runRequirementAlignmentExample.ts",
+    "smoke:real-ai": "node --env-file-if-exists=.env --import tsx examples/smokeRealAI.ts",
+    "ui": "node --env-file-if-exists=.env --import tsx src/ui/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "keywords": [
+    "code-change-understanding",
+    "harness",
+    "orchestration"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

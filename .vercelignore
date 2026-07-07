@@ -1,0 +1,12 @@
+# Secrets — configure these as Environment Variables in the Vercel project.
+.env
+.env.local
+
+# Agent workspace files that are irrelevant to the deployed app.
+memory/
+builder-skill/
+docs/
+.claude/
+.cursor/
+*.md
+!README.md

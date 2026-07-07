@@ -1,0 +1,8 @@
+node_modules/
+
+# Local environment files — never commit real secrets.
+# `.env.example` is intentionally tracked (see negation below).
+.env
+.env.local
+!.env.example
+.vercel
