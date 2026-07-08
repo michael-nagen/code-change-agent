@@ -136,6 +136,7 @@ const DAILY_UPDATE: DailyUpdate = {
 };
 
 const DAILY_WORK_GUIDANCE: DailyWorkGuidance = {
+  loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Implemented the planning stage before execution.',
   progressVsSpec: [
     {

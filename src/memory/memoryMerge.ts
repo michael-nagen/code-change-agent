@@ -43,6 +43,15 @@ export function renderPreviousProgressMemory(snapshot: ProjectProgressSnapshot):
     lines.push('Planned next actions:');
     for (const n of snapshot.nextActions) lines.push(`- ${n}`);
   }
+  if (snapshot.loopStage !== undefined) {
+    lines.push(`Plan loop stage: ${snapshot.loopStage}`);
+  }
+  if (snapshot.planDecisions !== undefined && snapshot.planDecisions.length > 0) {
+    lines.push('Plan decisions the developer already made:');
+    for (const d of snapshot.planDecisions) {
+      lines.push(`- [${d.action}] ${d.itemId}: ${d.text}${d.note !== undefined ? ` — ${d.note}` : ''}`);
+    }
+  }
   return lines.join('\n');
 }
 

@@ -1,4 +1,9 @@
 import type { TechnicalChangeBriefInput } from './types.js';
+import {
+  UNTRUSTED_CONTENT_SAFETY_INSTRUCTION,
+  fenceUntrustedContent,
+  renderConnectedSourceContextSection,
+} from '../shared/untrustedContent.js';
 
 /**
  * Reasoning constraints encoded in the prompt:
@@ -37,7 +42,16 @@ export function buildPrompt(input: TechnicalChangeBriefInput): string {
       ? JSON.stringify(input.dailyWorkGuidance, null, 2)
       : 'Not available — daily work guidance was not generated for this analysis.';
 
+  const userPreferencesSection =
+    input.userPromptPreferences !== undefined && input.userPromptPreferences.trim() !== ''
+      ? `\n\n${input.userPromptPreferences}`
+      : '';
+
+  const connectedSourceSection = renderConnectedSourceContextSection(input.connectedSourceContext);
+
   return `You are a Staff Engineer preparing a TECHNICAL CHANGE BRIEF: a clear, implementation-focused explanation of what a code change did. It helps the author explain the work in a PR, demo, walkthrough, or technical discussion.
+
+${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 WHAT THIS IS:
 - A technical explanation of the ACTUAL implementation: schema/model/API/workflow/UI changes, the most interesting functionality, an end-to-end flow, the files worth showing, and talking points.
@@ -107,13 +121,11 @@ Return ONLY a valid JSON object — no markdown fences, no commentary — with t
   "talkingPoints": ["Concise bullet the author can say when explaining the change."]
 }
 
-Keep the tone clear, technical, practical, and not too long — focused on what changed and why it matters.
+Keep the tone clear, technical, practical, and not too long — focused on what changed and why it matters.${userPreferencesSection}
 
-REQUIREMENT / SPEC:
-${input.requirementText}
+${fenceUntrustedContent({ label: 'REQUIREMENT / SPEC', content: input.requirementText })}
 
-RAW DIFF:
-${input.rawDiff}
+${fenceUntrustedContent({ label: 'RAW DIFF', content: input.rawDiff })}
 
 CHANGE EXPLANATION:
 ${changeExplanationJson}
@@ -128,5 +140,5 @@ FLOW ARTIFACT:
 ${flowArtifactSection}
 
 DAILY WORK GUIDANCE:
-${dailyWorkGuidanceSection}`;
+${dailyWorkGuidanceSection}${connectedSourceSection}`;
 }

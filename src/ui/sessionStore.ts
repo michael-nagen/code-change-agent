@@ -14,6 +14,7 @@ import type { AnalysisResult } from '../analysis/index.js';
 import type { PRDescription } from '../skills/prDescription/index.js';
 import type { VideoScript } from '../skills/videoScript/index.js';
 import type { DailyUpdate } from '../skills/dailyUpdate/index.js';
+import type { DailyWorkGuidance } from '../skills/dailyWorkGuidance/index.js';
 import type { EditableArtifact, EditableArtifactKey } from '../skills/artifactEdit/index.js';
 
 /** The artifact keys editable via chat in v1. */
@@ -141,6 +142,30 @@ export class UiSessionStore {
       changeSummary,
     });
     setEditableArtifact(record.result, artifactKey, structuredClone(updatedArtifact));
+    return structuredClone(record.result);
+  }
+
+  /**
+   * Replace the session's Daily Work Guidance with a decision-updated version
+   * (the approval loop's state transition). Not part of the chat-edit history:
+   * decisions are deliberate state changes, not undoable text edits. Returns a
+   * clone of the updated result.
+   */
+  updateDailyWorkGuidance({
+    sessionId,
+    guidance,
+  }: {
+    sessionId: string;
+    guidance: DailyWorkGuidance;
+  }): AnalysisResult {
+    const record = this.sessions.get(sessionId);
+    if (record === undefined) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    if (record.result.dailyWorkGuidance === undefined) {
+      throw new Error(`Daily Work Guidance is not present in session ${sessionId}.`);
+    }
+    record.result.dailyWorkGuidance = structuredClone(guidance);
     return structuredClone(record.result);
   }
 

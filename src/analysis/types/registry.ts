@@ -18,6 +18,7 @@ import type { DailyWorkGuidanceSkill } from '../../skills/dailyWorkGuidance/inde
 import type { TechnicalChangeBriefSkill } from '../../skills/technicalChangeBrief/index.js';
 import type { DemoPrepLoopSkill } from '../../skills/demoPrepLoop/index.js';
 import type { WeeklyReviewSkill } from '../../skills/weeklyReview/index.js';
+import type { GuidanceCritiqueSkill } from '../../skills/dailyWorkGuidanceCritique/index.js';
 
 /** Maps each skill key to the interface an implementation must satisfy. */
 export interface RegisteredSkills {
@@ -29,6 +30,8 @@ export interface RegisteredSkills {
   prDescription: PRDescriptionSkill;
   dailyUpdate: DailyUpdateSkill;
   dailyWorkGuidance: DailyWorkGuidanceSkill;
+  /** The bounded self-critique pass over a generated guidance plan. */
+  dailyWorkGuidanceCritique: GuidanceCritiqueSkill;
   technicalChangeBrief: TechnicalChangeBriefSkill;
   demoPrepLoop: DemoPrepLoopSkill;
   weeklyReview: WeeklyReviewSkill;

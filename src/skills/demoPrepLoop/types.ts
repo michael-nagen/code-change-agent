@@ -46,6 +46,18 @@ export interface DemoPrepLoopInput {
   technicalChangeBrief?: TechnicalChangeBrief;
   /** Present only when the optional video-script step ran. */
   videoScript?: VideoScript;
+  /**
+   * A pre-rendered block of the developer's personal working / prompt
+   * preferences (demo/video style). It shapes how the plan READS and is
+   * structured only — never the factual claims about the change.
+   */
+  userPromptPreferences?: string;
+  /**
+   * A pre-rendered block of connected source context (GitHub/Notion/memory)
+   * assembled from the session's project context. SUPPORTING context only — the
+   * requirement/spec and diff remain the source of truth for factual claims.
+   */
+  connectedSourceContext?: string;
 }
 
 /**

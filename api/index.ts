@@ -12,43 +12,62 @@
  * `UI_MODE=real` plus the OpenAI env vars (set in the Vercel project settings).
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { resolveMemoryStore } from '../src/index.js';
+import { createUiRequestListener, resolveEngine } from '../src/ui/index.js';
 import {
-  AnalysisHarness,
-  OpenAICompatibleLanguageModel,
-  DefaultArtifactEditSkill,
-  MockArtifactEditSkill,
-  type ArtifactEditSkill,
-} from '../src/index.js';
-import {
-  createUiRequestListener,
-  HarnessAnalysisRunner,
-  MockAnalysisRunner,
-  type AnalysisRunner,
-  type UiMode,
-} from '../src/ui/index.js';
+  resolveTelegramConfig,
+  createTelegramWebhookHandler,
+  DefaultTelegramWorkflowBridge,
+  type TelegramWebhookHandler,
+  type TelegramSourceDefaults,
+} from '../src/telegram/index.js';
 
-function resolveRunner(): {
-  runner: AnalysisRunner;
-  mode: UiMode;
-  artifactEditSkill: ArtifactEditSkill;
-} {
-  if (process.env.UI_MODE === 'real') {
-    const model = OpenAICompatibleLanguageModel.fromEnv();
-    const harness = new AnalysisHarness({ model });
-    return {
-      runner: new HarnessAnalysisRunner(harness),
-      mode: 'real',
-      artifactEditSkill: new DefaultArtifactEditSkill(model),
-    };
-  }
+// One shared store for both the runner (memory read on a run) and the memory
+// handlers (save/clear/edit/status). Note: on serverless the default file store
+// lives on an ephemeral/read-only FS, so memory does not persist across cold
+// starts — set MEMORY_STORE=memory or a writable MEMORY_DATA_DIR to control it.
+// Sharing one instance keeps a warm lambda internally consistent regardless.
+//
+// The engine (runner, mode, edit/refinement skills, and — in real mode —
+// configured Notion/GitHub connectors) is built by the SAME shared factory the
+// local server uses, so production and local cannot drift.
+const memoryStore = resolveMemoryStore();
+const engine = resolveEngine(memoryStore);
+
+/** Configured default sources Telegram may fall back to (read straight from env). */
+function telegramSourceDefaults(): TelegramSourceDefaults {
+  const githubPrUrl = process.env.GITHUB_DEFAULT_PR_URL?.trim();
+  const notionPageId = process.env.NOTION_DEFAULT_PAGE_ID?.trim();
   return {
-    runner: new MockAnalysisRunner(),
-    mode: 'mock',
-    artifactEditSkill: new MockArtifactEditSkill(),
+    ...(githubPrUrl !== undefined && githubPrUrl !== '' ? { githubPrUrl } : {}),
+    ...(notionPageId !== undefined && notionPageId !== '' ? { notionPageId } : {}),
   };
 }
 
-const listener = createUiRequestListener(resolveRunner());
+/**
+ * Build the Telegram webhook handler when configured; otherwise leave it off.
+ * Telegram drives the SAME analysis workflow through a bridge over the shared
+ * runner, so it never duplicates engine logic.
+ */
+function resolveTelegram(): TelegramWebhookHandler | undefined {
+  const resolved = resolveTelegramConfig();
+  if (!resolved.enabled || resolved.config === undefined) return undefined;
+  const bridge = new DefaultTelegramWorkflowBridge({
+    runner: engine.runner,
+    mode: engine.mode,
+    memoryStore,
+    defaults: telegramSourceDefaults(),
+    notionWriteBack: engine.notionWriteBack,
+  });
+  return createTelegramWebhookHandler({ config: resolved.config, memoryStore, bridge });
+}
+
+const telegram = resolveTelegram();
+const listener = createUiRequestListener({
+  ...engine,
+  memoryStore,
+  ...(telegram !== undefined ? { telegram } : {}),
+});
 
 /**
  * `@vercel/node` reads the request stream and exposes the parsed value on

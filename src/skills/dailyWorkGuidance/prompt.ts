@@ -1,4 +1,9 @@
 import type { DailyWorkGuidanceInput } from './types.js';
+import {
+  UNTRUSTED_CONTENT_SAFETY_INSTRUCTION,
+  fenceUntrustedContent,
+  renderConnectedSourceContextSection,
+} from '../shared/untrustedContent.js';
 
 /**
  * Reasoning constraints encoded in the prompt:
@@ -24,17 +29,29 @@ export function buildPrompt(input: DailyWorkGuidanceInput): string {
   const gapReportJson = JSON.stringify(input.gapReport, null, 2);
   const flowArtifactJson = JSON.stringify(input.flowArtifact, null, 2);
 
-  const previousProgressMemory =
+  const previousProgressMemorySection =
     input.previousProgressMemory !== undefined && input.previousProgressMemory.trim() !== ''
-      ? input.previousProgressMemory
-      : 'None provided — treat this as the first tracked day and leave previous statuses out where unknown.';
+      ? fenceUntrustedContent({
+          label: 'PREVIOUS PROGRESS MEMORY',
+          content: input.previousProgressMemory,
+        })
+      : 'PREVIOUS PROGRESS MEMORY:\nNone provided — treat this as the first tracked day and leave previous statuses out where unknown.';
 
   const todayGoal =
     input.todayGoal !== undefined && input.todayGoal.trim() !== ''
       ? input.todayGoal
       : 'None stated — infer the most valuable goal from the spec and the gaps.';
 
+  const userPreferencesSection =
+    input.userPromptPreferences !== undefined && input.userPromptPreferences.trim() !== ''
+      ? `\n\n${input.userPromptPreferences}`
+      : '';
+
+  const connectedSourceSection = renderConnectedSourceContextSection(input.connectedSourceContext);
+
   return `You are a Developer Work Companion helping a developer decide how to work TODAY. Use only the spec/checklist, the previous progress memory, the goal, and the upstream analysis artifacts below.
+
+${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 GUIDING PRINCIPLES:
 - Reason ONLY from the inputs below. They are authoritative and finished. Do NOT re-derive or re-analyze the change, and do NOT ask for or assume a raw diff.
@@ -84,17 +101,15 @@ Return ONLY a valid JSON object — no markdown fences, no commentary — with t
   }
 }
 
-SPEC / CHECKLIST:
-${input.specOrChecklist}
+${fenceUntrustedContent({ label: 'SPEC / CHECKLIST', content: input.specOrChecklist })}
 
 DATE:
 ${input.date}
 
-PREVIOUS PROGRESS MEMORY:
-${previousProgressMemory}
+${previousProgressMemorySection}${connectedSourceSection}
 
 GOAL FOR TODAY:
-${todayGoal}
+${todayGoal}${userPreferencesSection}
 
 CHANGE EXPLANATION (yesterday's work):
 ${changeExplanationJson}

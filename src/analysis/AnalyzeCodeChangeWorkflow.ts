@@ -1,6 +1,11 @@
 import type { RequirementInputAdapter } from '../tools/index.js';
 import { hashString } from './hashing.js';
 import { HarnessError } from '../errors/HarnessError.js';
+import { renderPromptPreferences, type PromptPreferenceCategory } from '../memory/index.js';
+import { formatProjectContextForPrompt } from '../sources/index.js';
+import { logEvent, startTimer, describeErrorForLog } from '../observability/index.js';
+import { runGuidanceSelfCritique } from './guidanceSelfCritique.js';
+import type { GuidanceCritiqueSkill } from '../skills/dailyWorkGuidanceCritique/index.js';
 import type {
   AnalysisSession,
   SkillRegistry,
@@ -45,6 +50,15 @@ export async function runAnalyzeCodeChange({
   includeDemoPrepLoop: boolean;
   includeWeeklyReview: boolean;
 }): Promise<AnalysisSession> {
+  // Connected source context (GitHub/Notion/memory) rendered once as a capped,
+  // untrusted, supporting-only block. It is threaded into the narrative skills
+  // (daily/technical/demo/weekly); the explicit spec/diff remain the source of
+  // truth. Undefined when there is no supporting source, so the section is
+  // omitted rather than empty.
+  const connectedSourceContext = formatProjectContextForPrompt({
+    projectContext: session.inputs.projectContext,
+  });
+
   await runStep({
     session,
     step: 'normalizeRequirement',
@@ -257,8 +271,12 @@ export async function runAnalyzeCodeChange({
 
         const { previousProgressMemory, todayGoal } = session.inputs;
         const date = new Date().toISOString().slice(0, 10);
+        const userPromptPreferences = preferencesFor({
+          session,
+          categories: ['dailyUpdate', 'cursor'],
+        });
         const skill = registry.resolve('dailyWorkGuidance');
-        session.artifacts.dailyWorkGuidance = await skill.execute({
+        const generated = await skill.execute({
           specOrChecklist: requirementInput.requirementText,
           date,
           changeExplanation,
@@ -267,7 +285,26 @@ export async function runAnalyzeCodeChange({
           flowArtifact,
           ...(previousProgressMemory !== undefined ? { previousProgressMemory } : {}),
           ...(todayGoal !== undefined ? { todayGoal } : {}),
+          ...(userPromptPreferences !== undefined ? { userPromptPreferences } : {}),
+          ...(connectedSourceContext !== undefined ? { connectedSourceContext } : {}),
         });
+
+        // Bounded self-critique: exactly one pass before the user sees the
+        // plan. When no critic is wired (e.g. skill-doubles setups), the plan
+        // is shown as generated — critique is quality support, never a gate.
+        const criticSkill = tryResolveGuidanceCritiqueSkill(registry);
+        session.artifacts.dailyWorkGuidance =
+          criticSkill === undefined
+            ? generated
+            : await runGuidanceSelfCritique({
+                skill: criticSkill,
+                guidance: generated,
+                requirementAlignment,
+                gapReport,
+                ...(previousProgressMemory !== undefined ? { previousProgressMemory } : {}),
+                ...(todayGoal !== undefined ? { todayGoal } : {}),
+                checkedAt: new Date().toISOString(),
+              });
       },
     });
   }
@@ -292,6 +329,7 @@ export async function runAnalyzeCodeChange({
           );
         }
 
+        const userPromptPreferences = preferencesFor({ session, categories: ['codeReview'] });
         const skill = registry.resolve('technicalChangeBrief');
         session.artifacts.technicalChangeBrief = await skill.execute({
           rawDiff: session.inputs.rawDiff,
@@ -301,6 +339,8 @@ export async function runAnalyzeCodeChange({
           ...(gapReport !== undefined ? { gapReport } : {}),
           ...(flowArtifact !== undefined ? { flowArtifact } : {}),
           ...(dailyWorkGuidance !== undefined ? { dailyWorkGuidance } : {}),
+          ...(userPromptPreferences !== undefined ? { userPromptPreferences } : {}),
+          ...(connectedSourceContext !== undefined ? { connectedSourceContext } : {}),
         });
       },
     });
@@ -333,6 +373,7 @@ export async function runAnalyzeCodeChange({
           );
         }
 
+        const userPromptPreferences = preferencesFor({ session, categories: ['demoVideo'] });
         const skill = registry.resolve('demoPrepLoop');
         session.artifacts.demoPrepLoop = await skill.execute({
           rawDiff: session.inputs.rawDiff,
@@ -344,6 +385,8 @@ export async function runAnalyzeCodeChange({
           ...(dailyWorkGuidance !== undefined ? { dailyWorkGuidance } : {}),
           ...(technicalChangeBrief !== undefined ? { technicalChangeBrief } : {}),
           ...(videoScript !== undefined ? { videoScript } : {}),
+          ...(userPromptPreferences !== undefined ? { userPromptPreferences } : {}),
+          ...(connectedSourceContext !== undefined ? { connectedSourceContext } : {}),
         });
       },
     });
@@ -378,6 +421,10 @@ export async function runAnalyzeCodeChange({
 
         const { previousProgressMemory } = session.inputs;
         const generatedAt = new Date().toISOString();
+        const userPromptPreferences = preferencesFor({
+          session,
+          categories: ['weeklyReview', 'mentorUpdate', 'demoVideo'],
+        });
         const skill = registry.resolve('weeklyReview');
         session.artifacts.weeklyReview = await skill.execute({
           rawDiff: session.inputs.rawDiff,
@@ -391,12 +438,32 @@ export async function runAnalyzeCodeChange({
           ...(technicalChangeBrief !== undefined ? { technicalChangeBrief } : {}),
           ...(demoPrepLoop !== undefined ? { demoPrepLoop } : {}),
           ...(previousProgressMemory !== undefined ? { previousProgressMemory } : {}),
+          ...(userPromptPreferences !== undefined ? { userPromptPreferences } : {}),
+          ...(connectedSourceContext !== undefined ? { connectedSourceContext } : {}),
         });
       },
     });
   }
 
   return session;
+}
+
+/**
+ * The critique skill is optional support, not a pipeline dependency: setups
+ * that inject only the skills they use (tests, partial harnesses) must keep
+ * working, so an unregistered critic means "skip the pass", never a failure.
+ */
+function tryResolveGuidanceCritiqueSkill(
+  registry: SkillRegistry,
+): GuidanceCritiqueSkill | undefined {
+  try {
+    return registry.resolve('dailyWorkGuidanceCritique');
+  } catch (error) {
+    if (error instanceof HarnessError && error.code === 'UNKNOWN_SKILL') {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -416,6 +483,7 @@ async function runStep({
   run: () => Promise<void>;
 }): Promise<void> {
   if (isAlreadyDone()) {
+    logEvent({ event: 'step_skipped_cached', fields: { step, artifactType: step, cached: true } });
     markCompleted({ session, step });
     return;
   }
@@ -423,6 +491,8 @@ async function runStep({
   session.status.currentStep = step;
   touch(session);
 
+  logEvent({ event: 'step_started', fields: { step, artifactType: step, cached: false } });
+  const stopStepTimer = startTimer();
   try {
     await run();
   } catch (err) {
@@ -430,12 +500,21 @@ async function runStep({
       session.status.failedSteps.push(step);
     }
     touch(session);
+    logEvent({
+      event: 'step_failed',
+      level: 'error',
+      fields: { step, artifactType: step, durationMs: stopStepTimer(), ...describeErrorForLog(err) },
+    });
     throw err;
   }
 
   markCompleted({ session, step });
   session.status.currentStep = undefined;
   touch(session);
+  logEvent({
+    event: 'step_completed',
+    fields: { step, artifactType: step, cached: false, durationMs: stopStepTimer() },
+  });
 }
 
 function markCompleted({
@@ -453,4 +532,22 @@ function markCompleted({
 
 function touch(session: AnalysisSession): void {
   session.metadata.updatedAt = new Date().toISOString();
+}
+
+/**
+ * Render the developer's prompt preferences for the categories a given skill
+ * cares about. Returns undefined when there is nothing to say, so the skill's
+ * prompt omits the section entirely (never leaking an empty block).
+ */
+function preferencesFor({
+  session,
+  categories,
+}: {
+  session: AnalysisSession;
+  categories: PromptPreferenceCategory[];
+}): string | undefined {
+  return renderPromptPreferences({
+    preferences: session.inputs.promptPreferences,
+    categories,
+  });
 }

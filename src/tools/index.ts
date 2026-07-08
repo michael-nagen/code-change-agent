@@ -33,11 +33,15 @@ export type {
 
 export {
   DefaultPresentationDeckBuilderTool,
+  DefaultPptxDeckBuilderTool,
   buildMarkdownDeck,
+  buildPptxDeck,
 } from './presentation/index.js';
 export type {
   DeckMetadata,
   MarkdownDeckInput,
   MarkdownDeckResult,
   PresentationDeckBuilderTool,
+  PptxDeckResult,
+  PptxDeckBuilderTool,
 } from './presentation/index.js';

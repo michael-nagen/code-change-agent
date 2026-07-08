@@ -11,8 +11,11 @@
 import type { AnalysisRequest, AnalysisRunner, AnalyzeResponse, UiMode } from './types.js';
 import { parseFormSubmission, RequestParseError } from './parseRequest.js';
 import { normalizeInput, type FetchLike } from './normalizeInput.js';
-import { renderWorkspaceCards } from './features/artifactViews/index.js';
-import { resolveUserId, toMemoryProjectId } from '../memory/index.js';
+import { renderWorkspaceCards, summarizeGuidance } from './features/artifactViews/index.js';
+import { resolveUserId, toMemoryProjectId, InMemoryMemoryStore } from '../memory/index.js';
+import type { MemoryStore } from '../memory/index.js';
+import { buildMemoryStatus } from './memoryStatus.js';
+import { summarizeSources } from './sourcesSummary.js';
 import type { UiSessionStore } from './sessionStore.js';
 
 export async function handleAnalyze({
@@ -21,6 +24,7 @@ export async function handleAnalyze({
   body,
   fetchImpl,
   store,
+  memoryStore = new InMemoryMemoryStore(),
 }: {
   runner: AnalysisRunner;
   mode: UiMode;
@@ -29,6 +33,12 @@ export async function handleAnalyze({
   fetchImpl?: FetchLike;
   /** Optional UI session cache; populated so chat editing can reuse artifacts. */
   store?: UiSessionStore;
+  /**
+   * Durable memory store, used to surface the stored project memory. Defaults to
+   * an in-memory store so direct callers/tests need not provide one; the server
+   * injects the shared persistent store.
+   */
+  memoryStore?: MemoryStore;
 }): Promise<AnalyzeResponse> {
   let submission;
   try {
@@ -72,16 +82,28 @@ export async function handleAnalyze({
     // Cache the full result so the side-chat edit endpoints can reuse the
     // session's artifacts without re-running analysis.
     store?.saveResult(result);
+    const memory = await buildMemoryStatus({
+      memoryStore,
+      ...(submission.projectName !== undefined ? { projectName: submission.projectName } : {}),
+      activeSpecSummary: result.requirementAlignment.requirementSummary,
+      markLoaded: true,
+    });
     return {
       status: 'success',
       mode,
       sessionId: result.sessionId,
+      ...(result.traceId !== undefined ? { traceId: result.traceId } : {}),
       overview: {
         readiness: result.gapReport?.readiness ?? null,
         confidence: result.requirementAlignment.confidence,
+        ...(result.dailyWorkGuidance !== undefined
+          ? { guidance: summarizeGuidance(result.dailyWorkGuidance) }
+          : {}),
       },
       inputs: { requirementText, rawDiff },
+      memory,
       cards: renderWorkspaceCards(result),
+      sources: summarizeSources(result.projectContext),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

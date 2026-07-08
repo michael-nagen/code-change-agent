@@ -37,6 +37,18 @@ export interface TechnicalChangeBriefInput {
   flowArtifact?: FlowArtifact;
   /** Present only when the optional daily-work-guidance step ran. */
   dailyWorkGuidance?: DailyWorkGuidance;
+  /**
+   * A pre-rendered block of the developer's personal working / prompt
+   * preferences (technical explanation and code-review style). It shapes how the
+   * brief READS only — never the factual claims about the change.
+   */
+  userPromptPreferences?: string;
+  /**
+   * A pre-rendered block of connected source context (GitHub/Notion/memory)
+   * assembled from the session's project context. SUPPORTING context only — the
+   * requirement/spec and diff remain the source of truth for factual claims.
+   */
+  connectedSourceContext?: string;
 }
 
 /**

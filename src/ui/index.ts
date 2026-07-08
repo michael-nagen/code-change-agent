@@ -14,6 +14,7 @@ export type {
   AnalyzeResponse,
   ChatEditResponse,
   UndoArtifactEditResponse,
+  WriteNotionResponse,
 } from './types.js';
 export { INPUT_MODES } from './types.js';
 export { parseFormSubmission, RequestParseError } from './parseRequest.js';
@@ -26,8 +27,15 @@ export {
 export type { FetchLike, MinimalResponse } from './normalizeInput.js';
 export { renderWorkspaceCards, prDescriptionToMarkdown } from './features/artifactViews/index.js';
 export { HarnessAnalysisRunner, MockAnalysisRunner } from './analysisRunner.js';
+export {
+  resolveEngine,
+  resolveHarnessSourceDeps,
+  resolveNotionWriteBack,
+} from './resolveEngine.js';
+export type { ResolvedEngine } from './resolveEngine.js';
 export { handleAnalyze } from './handleAnalyze.js';
 export { handleChatEdit, handleUndoArtifactEdit } from './handleChatEdit.js';
+export { handleWriteNotion } from './handleWriteNotion.js';
 export {
   UiSessionStore,
   EDITABLE_ARTIFACT_KEYS,

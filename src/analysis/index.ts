@@ -3,6 +3,13 @@ export type { AnalysisHarnessDeps } from './AnalysisHarness.js';
 export { InMemoryArtifactStore } from './InMemoryArtifactStore.js';
 export { DefaultSkillRegistry } from './DefaultSkillRegistry.js';
 export { runAnalyzeCodeChange } from './AnalyzeCodeChangeWorkflow.js';
+export { applyGuidanceDecisions, decisionItemId } from './applyGuidanceDecisions.js';
+export { applyGuidanceCritique, runGuidanceSelfCritique } from './guidanceSelfCritique.js';
+export type {
+  GuidanceDecision,
+  GuidanceDecisionAction,
+  ApplyGuidanceDecisionsResult,
+} from './applyGuidanceDecisions.js';
 export { hashString } from './hashing.js';
 export {
   ANALYZE_CODE_CHANGE_WORKFLOW,

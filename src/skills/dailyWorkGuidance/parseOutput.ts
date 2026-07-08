@@ -69,6 +69,9 @@ function validate(raw: unknown): DailyWorkGuidance {
   const obj = raw as Record<string, unknown>;
 
   return {
+    // Not model-supplied: the loop always starts unreviewed, and only applied
+    // user decisions may advance it.
+    loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
     yesterdaySummary: requireString({ obj, key: 'yesterdaySummary' }),
     progressVsSpec: requireProgressItems({ obj, key: 'progressVsSpec' }),
     advancedChecklistItems: requireAdvancedItems({ obj, key: 'advancedChecklistItems' }),

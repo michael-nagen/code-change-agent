@@ -3,8 +3,11 @@ export {
 } from './memory.js';
 export type {
   ChecklistStatusEntry,
+  PlanDecisionRecord,
   ProjectProgressSnapshot,
   ProjectMemory,
+  GeneralResponsePreferences,
+  PromptPreferences,
   UserPreferencesMemory,
   DeveloperMemoryContext,
 } from './memory.js';

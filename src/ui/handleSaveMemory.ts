@@ -16,6 +16,8 @@ import {
   snapshotFromWeeklyReview,
 } from '../analysis/memoryMapping.js';
 import { MemoryStoreError } from '../errors/MemoryStoreError.js';
+import { logEvent, runWithTrace, newTraceId } from '../observability/index.js';
+import { buildMemoryStatus } from './memoryStatus.js';
 import type { AnalysisResult } from '../analysis/index.js';
 import type { SaveMemoryResponse } from './types.js';
 import type { UiSessionStore } from './sessionStore.js';
@@ -24,10 +26,13 @@ import type { UiSessionStore } from './sessionStore.js';
 type MemorySource = 'dailyWorkGuidance' | 'weeklyReview';
 
 /** Resolve the snapshot to persist from the chosen source, or an error message. */
-function resolveSnapshot(
-  result: AnalysisResult,
-  source: MemorySource,
-): { snapshot: ProjectProgressSnapshot } | { error: string } {
+function resolveSnapshot({
+  result,
+  source,
+}: {
+  result: AnalysisResult;
+  source: MemorySource;
+}): { snapshot: ProjectProgressSnapshot } | { error: string } {
   if (source === 'weeklyReview') {
     if (result.weeklyReview === undefined) {
       return { error: 'Generate the Weekly Review first — there is no memory update to save.' };
@@ -42,17 +47,26 @@ function resolveSnapshot(
   return { snapshot: snapshotFromDailyWorkGuidance(result.dailyWorkGuidance) };
 }
 
-export async function handleSaveMemory({
-  memoryStore,
-  store,
-  sessionId,
-  body,
-}: {
+interface SaveMemoryArgs {
   memoryStore: MemoryStore;
   store: UiSessionStore;
   sessionId: string;
   body: unknown;
-}): Promise<SaveMemoryResponse> {
+}
+
+export async function handleSaveMemory(args: SaveMemoryArgs): Promise<SaveMemoryResponse> {
+  return runWithTrace(
+    { traceId: newTraceId(), sessionId: args.sessionId },
+    () => saveMemory(args),
+  );
+}
+
+async function saveMemory({
+  memoryStore,
+  store,
+  sessionId,
+  body,
+}: SaveMemoryArgs): Promise<SaveMemoryResponse> {
   if (typeof body !== 'object' || body === null) {
     return { status: 'error', message: 'Request body must be a JSON object.' };
   }
@@ -72,7 +86,7 @@ export async function handleSaveMemory({
     return { status: 'error', message: `Session not found: ${sessionId}` };
   }
 
-  const resolved = resolveSnapshot(result, source);
+  const resolved = resolveSnapshot({ result, source });
   if ('error' in resolved) {
     return { status: 'error', message: resolved.error };
   }
@@ -88,10 +102,22 @@ export async function handleSaveMemory({
       ...(existing !== undefined ? { existing } : {}),
     });
     await memoryStore.saveProjectMemory({ userId, projectId, memory });
+    logEvent({
+      event: 'memory_saved',
+      fields: {
+        scope: 'project',
+        projectId,
+        source,
+        snapshotDate: snapshot.date,
+        snapshotHistoryCount: memory.history.length,
+      },
+    });
+    const status = await buildMemoryStatus({ memoryStore, projectName, markLoaded: false });
     return {
       status: 'success',
       message: `Saved progress for "${projectName}" (${snapshot.date}). It will inform the next run.`,
       savedDate: snapshot.date,
+      memory: status,
     };
   } catch (error) {
     const message =

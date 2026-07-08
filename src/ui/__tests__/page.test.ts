@@ -74,12 +74,45 @@ test('on-demand generation is wired (Generate buttons + session continuation)', 
   assert.match(html, /sessionId: state\.sessionId/);
 });
 
+test('on-demand generation keeps the project memory context (sends projectName)', () => {
+  const html = renderPage({ mode: 'mock' });
+  // The generate payload must carry projectName; otherwise ingesting the
+  // response (which has no project snapshot without it) blanks the Project
+  // Memory panel after every generation.
+  assert.match(html, /sessionId: state\.sessionId, projectName:/);
+});
+
+test('Daily Work Guidance has Apply decisions controls wired to the apply-decisions endpoint', () => {
+  const html = renderPage({ mode: 'mock' });
+  assert.match(html, /Apply decisions/);
+  assert.match(html, /function applyDecisionsButton/);
+  assert.match(html, /function collectDecisions/);
+  assert.match(html, /api\.applyDecisions/);
+  assert.match(html, /apply-decisions/);
+});
+
 test('Daily Work Guidance has an explicit Save to memory action wired to the save endpoint', () => {
   const html = renderPage({ mode: 'mock' });
   assert.match(html, /Save to memory/);
   assert.match(html, /function saveMemoryButton/);
   assert.match(html, /save-memory/);
   assert.match(html, /api\.saveMemory/);
+});
+
+test('Project Memory panel + clear action are wired', () => {
+  const html = renderPage({ mode: 'mock' });
+  // A dedicated Project Memory item in the story-driven nav + panel renderer.
+  assert.match(html, /ids: \[[^\]]*'projectMemory'[^\]]*\]/);
+  assert.match(html, /id === 'projectMemory'\) return 'Project Memory'/);
+  assert.match(html, /function renderMemory/);
+  // Clear action is explicit, confirmed, and hits the clear endpoint.
+  assert.match(html, /Clear project memory/);
+  assert.match(html, /function clearMemory/);
+  assert.match(html, /window\.confirm/);
+  assert.match(html, /api\.clearMemory/);
+  assert.match(html, /\/api\/memory\/clear/);
+  // Clear empty-state copy.
+  assert.match(html, /No saved project memory yet/);
 });
 
 test('all four input modes remain available', () => {

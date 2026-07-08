@@ -71,6 +71,20 @@ export function notionDailyUpdateToMarkdown({
 export function dailyWorkGuidanceToMarkdown(g: DailyWorkGuidance): string {
   const lines: string[] = [];
   lines.push(`# Daily Work Guidance — ${g.memoryUpdate.date}`, '');
+  lines.push(`Loop: ${g.loopStatus.currentStage} (${g.loopStatus.overallStatus})`, '');
+
+  if (g.selfCritique !== undefined) {
+    lines.push('## Plan self-review');
+    lines.push(
+      `${g.selfCritique.revisionApplied ? 'Plan revised once before review.' : 'No revision needed.'} (confidence: ${g.selfCritique.confidence})`,
+    );
+    lines.push(g.selfCritique.summary);
+    for (const issue of g.selfCritique.issues) {
+      const target = issue.targetStepId !== undefined ? ` (${issue.targetStepId})` : '';
+      lines.push(`- [${issue.severity}]${target} ${issue.issue} — ${issue.suggestion}`);
+    }
+    lines.push('');
+  }
 
   lines.push('## Yesterday', '', g.yesterdaySummary, '');
 
@@ -114,7 +128,7 @@ export function dailyWorkGuidanceToMarkdown(g: DailyWorkGuidance): string {
   }
   lines.push('');
 
-  lines.push("## Today's planned steps (all pending approval)");
+  lines.push("## Today's planned steps");
   for (const s of g.plannedSteps) {
     lines.push(`### ${s.id}: ${s.title} [${s.status}]`);
     lines.push(`- Why it matters: ${s.whyItMatters}`);

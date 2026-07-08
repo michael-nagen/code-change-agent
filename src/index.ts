@@ -8,6 +8,8 @@ export { ProjectStoreError } from './errors/ProjectStoreError.js';
 export type { ProjectStoreErrorCode } from './errors/ProjectStoreError.js';
 export { MemoryStoreError } from './errors/MemoryStoreError.js';
 export type { MemoryStoreErrorCode } from './errors/MemoryStoreError.js';
+export { SourceError } from './errors/SourceError.js';
+export type { SourceErrorCode } from './errors/SourceError.js';
 
 export {
   MockLanguageModel,
@@ -83,6 +85,11 @@ export type {
   ProgressStatus,
   Confidence,
   ApprovalStatus,
+  GuidanceLoopStage,
+  GuidanceLoopOverallStatus,
+  GuidanceLoopStatus,
+  GuidanceCritiqueIssue,
+  GuidanceSelfCritique,
   ProgressItem,
   AdvancedChecklistItem,
   BlockerOrRisk,
@@ -181,7 +188,33 @@ export {
   runAnalyzeCodeChange,
   ANALYZE_CODE_CHANGE_WORKFLOW,
   assertWorkflowIncludeFlags,
+  applyGuidanceDecisions,
+  decisionItemId,
 } from './analysis/index.js';
+export type {
+  GuidanceDecision,
+  GuidanceDecisionAction,
+  ApplyGuidanceDecisionsResult,
+} from './analysis/index.js';
+export { mergeGuidanceRefinement } from './analysis/mergeGuidanceRefinement.js';
+export { applyGuidanceCritique, runGuidanceSelfCritique } from './analysis/guidanceSelfCritique.js';
+export { DefaultGuidanceCritiqueSkill } from './skills/dailyWorkGuidanceCritique/index.js';
+export type {
+  GuidanceCritiqueSkill,
+  GuidanceCritiqueInput,
+  GuidancePlanCritique,
+  CritiqueRevisedPlan,
+  CritiqueRevisedStep,
+  CritiqueRevisedDecision,
+} from './skills/dailyWorkGuidanceCritique/index.js';
+export { DefaultGuidanceRefinementSkill } from './skills/dailyWorkGuidanceRefinement/index.js';
+export type {
+  GuidanceRefinementSkill,
+  GuidanceRefinementInput,
+  GuidanceRefinementDecision,
+  GuidancePlanRefinement,
+  RevisedPlannedStep,
+} from './skills/dailyWorkGuidanceRefinement/index.js';
 export type {
   AnalysisHarnessDeps,
   AnalysisSession,
@@ -232,12 +265,19 @@ export type {
   NotionPlugin,
 } from './tools/index.js';
 
-export { DefaultPresentationDeckBuilderTool, buildMarkdownDeck } from './tools/index.js';
+export {
+  DefaultPresentationDeckBuilderTool,
+  DefaultPptxDeckBuilderTool,
+  buildMarkdownDeck,
+  buildPptxDeck,
+} from './tools/index.js';
 export type {
   DeckMetadata,
   MarkdownDeckInput,
   MarkdownDeckResult,
   PresentationDeckBuilderTool,
+  PptxDeckResult,
+  PptxDeckBuilderTool,
 } from './tools/index.js';
 
 export { InMemoryProjectStore } from './project/index.js';
@@ -258,6 +298,8 @@ export type {
 export {
   InMemoryMemoryStore,
   JsonFileMemoryStore,
+  DbMemoryStore,
+  createPgSqlClient,
   resolveMemoryStore,
   resolveUserId,
   toMemoryId,
@@ -274,6 +316,9 @@ export {
 export type {
   MemoryStore,
   MemoryStoreKind,
+  SqlClient,
+  SqlClientFactory,
+  SqlQueryResult,
   UserPreferencesMemory,
   ProjectMemory,
   ProjectProgressSnapshot,
@@ -284,3 +329,29 @@ export type {
   SaveProjectMemoryInput,
   ClearProjectMemoryInput,
 } from './memory/index.js';
+
+export {
+  buildNormalizedProjectContext,
+  resolveExternalSources,
+  resolveConnectors,
+  HttpNotionConnector,
+  HttpGitHubConnector,
+  extractNotionPageId,
+  toGitHubDiffUrl,
+  parseChangedFiles,
+  MockNotionConnector,
+  MockGitHubConnector,
+  defaultSourceFetch,
+} from './sources/index.js';
+export type {
+  ProjectSourceKind,
+  SourceReference,
+  NormalizedProjectSource,
+  NormalizedProjectContext,
+  GitHubPullRequestSource,
+  NotionConnector,
+  GitHubConnector,
+  SourceResponse,
+  SourceFetch,
+  ResolvedConnectors,
+} from './sources/index.js';

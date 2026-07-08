@@ -1,4 +1,9 @@
 import type { DemoPrepLoopInput } from './types.js';
+import {
+  UNTRUSTED_CONTENT_SAFETY_INSTRUCTION,
+  fenceUntrustedContent,
+  renderConnectedSourceContextSection,
+} from '../shared/untrustedContent.js';
 
 /**
  * Reasoning constraints encoded in the prompt:
@@ -49,7 +54,16 @@ export function buildPrompt(input: DemoPrepLoopInput): string {
       ? JSON.stringify(input.videoScript, null, 2)
       : 'Not available — the video script was not generated for this analysis.';
 
+  const userPreferencesSection =
+    input.userPromptPreferences !== undefined && input.userPromptPreferences.trim() !== ''
+      ? `\n\n${input.userPromptPreferences}`
+      : '';
+
+  const connectedSourceSection = renderConnectedSourceContextSection(input.connectedSourceContext);
+
   return `You are a demo coach and presentation director preparing a DEMO PREP LOOP: a complete, approval-gated plan for demoing and presenting a code change. It tells the author what story to tell, what to open in which order, which screenshots to capture manually, what appears on each slide, and what to say while each slide is shown.
+
+${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 WHAT THIS IS:
 - A story-first demo plan: a demo story proposal, a recommended walkthrough order, a code evidence plan, a manual screenshot/slide plan, a slide-by-slide deck plan that separates what is SHOWN from what is SAID, a draft 5-7 minute video script, a 30-45 second pitch, and a demo readiness checklist.
@@ -124,13 +138,11 @@ Return ONLY a valid JSON object — no markdown fences, no commentary — with t
   ]
 }
 
-Keep the tone clear, practical, and demo-focused — the author should be able to follow this plan without improvising.
+Keep the tone clear, practical, and demo-focused — the author should be able to follow this plan without improvising.${userPreferencesSection}
 
-REQUIREMENT / SPEC:
-${input.requirementText}
+${fenceUntrustedContent({ label: 'REQUIREMENT / SPEC', content: input.requirementText })}
 
-RAW DIFF:
-${input.rawDiff}
+${fenceUntrustedContent({ label: 'RAW DIFF', content: input.rawDiff })}
 
 CHANGE EXPLANATION:
 ${changeExplanationJson}
@@ -151,5 +163,5 @@ TECHNICAL CHANGE BRIEF (use this heavily when available):
 ${technicalChangeBriefSection}
 
 VIDEO SCRIPT:
-${videoScriptSection}`;
+${videoScriptSection}${connectedSourceSection}`;
 }

@@ -12,14 +12,21 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AnalysisRunner, UiMode } from './types.js';
 import type { ArtifactEditSkill } from '../skills/artifactEdit/index.js';
-import { MockArtifactEditSkill } from '../skills/mocks/index.js';
+import { MockArtifactEditSkill, MockGuidanceRefinementSkill } from '../skills/mocks/index.js';
+import type { GuidanceRefinementSkill } from '../skills/dailyWorkGuidanceRefinement/index.js';
 import { handleAnalyze } from './handleAnalyze.js';
 import { handleChatEdit, handleUndoArtifactEdit } from './handleChatEdit.js';
 import { handleSaveMemory } from './handleSaveMemory.js';
+import { handleApplyDecisions } from './handleApplyDecisions.js';
+import { handleClearMemory } from './handleClearMemory.js';
+import { handleEditMemory } from './handleEditMemory.js';
+import { handleWriteNotion } from './handleWriteNotion.js';
 import { UiSessionStore } from './sessionStore.js';
 import { renderPage } from './page.js';
 import { InMemoryMemoryStore } from '../memory/index.js';
 import type { MemoryStore } from '../memory/index.js';
+import type { NotionWriteBackService } from '../notion/index.js';
+import type { TelegramWebhookHandler } from '../telegram/index.js';
 
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
@@ -52,6 +59,12 @@ function sendHtml(res: ServerResponse, status: number, html: string): void {
   res.end(html);
 }
 
+/** Normalize a possibly-array HTTP header value to its first string, if any. */
+function firstHeader(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
 /**
  * Build (but do not start) the UI server with an injected runner + mode.
  *
@@ -64,7 +77,10 @@ export function createUiServer(options: {
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill?: ArtifactEditSkill;
+  guidanceRefinementSkill?: GuidanceRefinementSkill;
   memoryStore?: MemoryStore;
+  notionWriteBack?: NotionWriteBackService;
+  telegram?: TelegramWebhookHandler;
 }): Server {
   return createServer(createUiRequestListener(options));
 }
@@ -82,16 +98,33 @@ export function createUiRequestListener({
   runner,
   mode,
   artifactEditSkill = new MockArtifactEditSkill(),
+  guidanceRefinementSkill = new MockGuidanceRefinementSkill(),
   memoryStore = new InMemoryMemoryStore(),
+  notionWriteBack,
+  telegram,
 }: {
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill?: ArtifactEditSkill;
+  guidanceRefinementSkill?: GuidanceRefinementSkill;
   memoryStore?: MemoryStore;
+  notionWriteBack?: NotionWriteBackService;
+  telegram?: TelegramWebhookHandler;
 }): (req: IncomingMessage, res: ServerResponse) => void {
   const store = new UiSessionStore();
   return (req, res) => {
-    void handleRequest({ req, res, runner, mode, artifactEditSkill, memoryStore, store });
+    void handleRequest({
+      req,
+      res,
+      runner,
+      mode,
+      artifactEditSkill,
+      guidanceRefinementSkill,
+      memoryStore,
+      store,
+      ...(notionWriteBack !== undefined ? { notionWriteBack } : {}),
+      ...(telegram !== undefined ? { telegram } : {}),
+    });
   };
 }
 
@@ -124,16 +157,22 @@ async function handleRequest({
   runner,
   mode,
   artifactEditSkill,
+  guidanceRefinementSkill,
   memoryStore,
   store,
+  notionWriteBack,
+  telegram,
 }: {
   req: IncomingMessage;
   res: ServerResponse;
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill: ArtifactEditSkill;
+  guidanceRefinementSkill: GuidanceRefinementSkill;
   memoryStore: MemoryStore;
   store: UiSessionStore;
+  notionWriteBack?: NotionWriteBackService;
+  telegram?: TelegramWebhookHandler;
 }): Promise<void> {
   const method = req.method ?? 'GET';
   const url = req.url ?? '/';
@@ -144,13 +183,54 @@ async function handleRequest({
     return;
   }
 
+  if (method === 'POST' && path === '/api/telegram') {
+    if (telegram === undefined) {
+      sendJson(res, 404, { ok: false, description: 'Telegram is not configured.' });
+      return;
+    }
+    const parsed = await readJsonBody(req);
+    if (!parsed.ok) {
+      sendJson(res, 400, { ok: false, description: 'Request body must be valid JSON.' });
+      return;
+    }
+    const secretHeader = firstHeader(req.headers['x-telegram-bot-api-secret-token']);
+    const result = await telegram.handle({
+      update: parsed.value,
+      ...(secretHeader !== undefined ? { secretHeader } : {}),
+    });
+    sendJson(res, result.statusCode, result.body);
+    return;
+  }
+
   if (method === 'POST' && path === '/api/analyze') {
     const parsed = await readJsonBody(req);
     if (!parsed.ok) {
       sendJson(res, 400, { status: 'error', mode, message: 'Request body must be valid JSON.' });
       return;
     }
-    const response = await handleAnalyze({ runner, mode, body: parsed.value, store });
+    const response = await handleAnalyze({ runner, mode, body: parsed.value, store, memoryStore });
+    sendJson(res, 200, response);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/memory/edit') {
+    const parsed = await readJsonBody(req);
+    if (!parsed.ok) {
+      sendJson(res, 400, { status: 'error', message: 'Request body must be valid JSON.' });
+      return;
+    }
+    const response = await handleEditMemory({ memoryStore, body: parsed.value });
+    sendJson(res, 200, response);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/memory/clear') {
+    const parsed = await readJsonBody(req);
+    if (!parsed.ok) {
+      sendJson(res, 400, { status: 'error', message: 'Request body must be valid JSON.' });
+      return;
+    }
+    const response = await handleClearMemory({ memoryStore, body: parsed.value });
     sendJson(res, 200, response);
     return;
   }
@@ -196,6 +276,40 @@ async function handleRequest({
     const response = await handleSaveMemory({
       memoryStore,
       store,
+      sessionId: sessionRoute.sessionId,
+      body: parsed.value,
+    });
+    sendJson(res, 200, response);
+    return;
+  }
+
+  if (method === 'POST' && sessionRoute !== null && sessionRoute.action === 'apply-decisions') {
+    const parsed = await readJsonBody(req);
+    if (!parsed.ok) {
+      sendJson(res, 400, { status: 'error', message: 'Request body must be valid JSON.' });
+      return;
+    }
+    const response = await handleApplyDecisions({
+      memoryStore,
+      store,
+      sessionId: sessionRoute.sessionId,
+      body: parsed.value,
+      refinementSkill: guidanceRefinementSkill,
+    });
+    sendJson(res, 200, response);
+    return;
+  }
+
+  if (method === 'POST' && sessionRoute !== null && sessionRoute.action === 'write-notion') {
+    const parsed = await readJsonBody(req);
+    if (!parsed.ok) {
+      sendJson(res, 400, { status: 'error', message: 'Request body must be valid JSON.' });
+      return;
+    }
+    const response = await handleWriteNotion({
+      ...(notionWriteBack !== undefined ? { notionWriteBack } : {}),
+      store,
+      memoryStore,
       sessionId: sessionRoute.sessionId,
       body: parsed.value,
     });

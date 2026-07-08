@@ -38,6 +38,20 @@ export interface DailyWorkGuidanceInput {
   previousProgressMemory?: string;
   /** An optional goal for today, e.g. "I want to finish this project today". */
   todayGoal?: string;
+  /**
+   * A pre-rendered block of the developer's personal working / prompt
+   * preferences (format, tone, daily-update and Cursor-prompt style). It shapes
+   * how the output READS only — it never overrides factual claims grounded in
+   * the spec or the upstream analysis.
+   */
+  userPromptPreferences?: string;
+  /**
+   * A pre-rendered block of connected source context (GitHub/Notion/memory)
+   * assembled from the session's project context. SUPPORTING context only — the
+   * spec/checklist and upstream analysis remain the source of truth, and it must
+   * never override or fabricate factual claims.
+   */
+  connectedSourceContext?: string;
 }
 
 /**
@@ -53,8 +67,38 @@ export type ProgressStatus = 'done' | 'partial' | 'missing' | 'blocked' | 'uncle
 /** The model's confidence in a classification. */
 export type Confidence = 'high' | 'medium' | 'low';
 
-/** Every planned step and open decision is surfaced as pending approval. */
-export type ApprovalStatus = 'pending_approval';
+/**
+ * The lifecycle of a recommended item. The skill ALWAYS emits
+ * `pending_approval` (the parser enforces this); the other statuses are only
+ * ever set by the user's explicit decisions applied after generation.
+ */
+export type ApprovalStatus = 'pending_approval' | 'approved' | 'rejected' | 'edited' | 'deferred';
+
+/**
+ * Where the guidance loop stands.
+ * - planning — the proposed plan awaits the user's decisions.
+ * - revised_plan_pending_approval — the model re-planned after the user
+ *   rejected/edited items; the revised steps await approval.
+ * - approved_plan — the user has decided on every pending item.
+ */
+export type GuidanceLoopStage = 'planning' | 'revised_plan_pending_approval' | 'approved_plan';
+
+/** Loop-level review state, advanced only by applied user decisions. */
+export type GuidanceLoopOverallStatus = 'pending_user_review' | 'approved';
+
+/**
+ * The approval loop's state machine. The skill never sets this — the parser
+ * initializes it deterministically and it advances only when the user's
+ * decisions are applied.
+ */
+export interface GuidanceLoopStatus {
+  currentStage: GuidanceLoopStage;
+  overallStatus: GuidanceLoopOverallStatus;
+  /** ISO timestamp of the last applied decision batch, once one exists. */
+  decidedAt?: string;
+  /** The model's one-paragraph summary of its last re-plan, once one exists. */
+  lastRevisionSummary?: string;
+}
 
 /** One spec/checklist item compared against the latest work. */
 export interface ProgressItem {
@@ -101,6 +145,8 @@ export interface DecisionNeedingApproval {
   /** The model's recommendation among the options, if it has one. */
   recommendedOption?: string;
   status: ApprovalStatus;
+  /** The user's note/reason recorded with their decision, when they gave one. */
+  note?: string;
 }
 
 /**
@@ -122,6 +168,13 @@ export interface PlannedStep {
   /** Spec/checklist items this step advances, when known. */
   relatedSpecItems?: string[];
   status: ApprovalStatus;
+  /** The user's note/reason recorded with their decision, when they gave one. */
+  note?: string;
+  /**
+   * For a model-revised step: the id of the rejected/edited step it replaces,
+   * or "new" when the revision introduced it. Absent on original steps.
+   */
+  respondsTo?: string;
 }
 
 /**
@@ -162,7 +215,43 @@ export interface MemoryUpdate {
   nextActions: string[];
 }
 
+/** One problem the self-critique found with the proposed plan. */
+export interface GuidanceCritiqueIssue {
+  /** The planned step the issue concerns, when it is step-specific. */
+  targetStepId?: string;
+  issue: string;
+  severity: 'high' | 'medium' | 'low';
+  /** What should change to address it. */
+  suggestion: string;
+}
+
+/**
+ * The result of the bounded self-critique pass that runs once after the plan
+ * is generated and before it is shown to the user. It is a quality review of
+ * the PLAN only: it never approves anything, never alters factual sections,
+ * and a revision (when applied) still returns every step pending approval.
+ */
+export interface GuidanceSelfCritique {
+  issues: GuidanceCritiqueIssue[];
+  /** Whether the one allowed revision pass was applied to the plan. */
+  revisionApplied: boolean;
+  summary: string;
+  confidence: Confidence;
+  /** ISO timestamp of the critique pass. */
+  checkedAt: string;
+}
+
 export interface DailyWorkGuidance {
+  /**
+   * The approval loop's state. Starts at planning / pending_user_review and
+   * advances only when the user's decisions are applied.
+   */
+  loopStatus: GuidanceLoopStatus;
+  /**
+   * Present when the bounded self-critique pass ran (at most once per
+   * generation). Optional and additive: artifacts without it stay valid.
+   */
+  selfCritique?: GuidanceSelfCritique;
   /** What was done yesterday, drawn from the latest work analysis. */
   yesterdaySummary: string;
   /** Each spec/checklist item compared against yesterday's work. */

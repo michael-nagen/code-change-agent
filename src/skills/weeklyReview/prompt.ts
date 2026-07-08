@@ -1,4 +1,9 @@
 import type { WeeklyReviewInput } from './types.js';
+import {
+  UNTRUSTED_CONTENT_SAFETY_INSTRUCTION,
+  fenceUntrustedContent,
+  renderConnectedSourceContextSection,
+} from '../shared/untrustedContent.js';
 
 /**
  * Reasoning constraints encoded in the prompt:
@@ -47,17 +52,29 @@ export function buildPrompt(input: WeeklyReviewInput): string {
     input.demoPrepLoop,
     'Not available — the demo prep loop was not generated (keep a demo/video story but LOWER its confidence and note it in missingInputs).',
   );
-  const previousProgressMemory =
+  const previousProgressMemorySection =
     input.previousProgressMemory !== undefined && input.previousProgressMemory.trim() !== ''
-      ? input.previousProgressMemory
-      : 'None provided — treat this as the first tracked week; do not invent prior progress.';
+      ? fenceUntrustedContent({
+          label: 'PREVIOUS PROGRESS MEMORY',
+          content: input.previousProgressMemory,
+        })
+      : 'PREVIOUS PROGRESS MEMORY:\nNone provided — treat this as the first tracked week; do not invent prior progress.';
 
   const reviewPeriodLabel =
     input.reviewPeriodLabel !== undefined && input.reviewPeriodLabel.trim() !== ''
       ? input.reviewPeriodLabel
       : `Week ending ${input.generatedAt.slice(0, 10)}`;
 
+  const userPreferencesSection =
+    input.userPromptPreferences !== undefined && input.userPromptPreferences.trim() !== ''
+      ? `\n\n${input.userPromptPreferences}`
+      : '';
+
+  const connectedSourceSection = renderConnectedSourceContextSection(input.connectedSourceContext);
+
   return `You are a Developer Work Companion writing a WEEKLY REVIEW: the central synthesis of the week that can seed a status update, a demo narrative, a video script, and a manager review. Use only the inputs below.
+
+${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 GUIDING PRINCIPLES:
 - SYNTHESIZE; do not merely restate one artifact. Roles: TECHNICAL CHANGE BRIEF → "What Changed Technically"; DEMO PREP LOOP → the "Demo / Video Story" (strongest story, what to show vs say, structure, key files/screens, product sentence); DAILY WORK GUIDANCE → daily progress and next steps; PREVIOUS PROGRESS MEMORY → what was already done, decisions, blockers, and next actions across earlier runs.
@@ -119,11 +136,9 @@ Return ONLY a valid JSON object — no markdown fences, no commentary — with t
   }
 }
 
-SPEC / REQUIREMENT:
-${input.requirementText}
+${fenceUntrustedContent({ label: 'SPEC / REQUIREMENT', content: input.requirementText })}${userPreferencesSection}
 
-PREVIOUS PROGRESS MEMORY:
-${previousProgressMemory}
+${previousProgressMemorySection}
 
 CHANGE EXPLANATION:
 ${changeExplanationJson}
@@ -146,6 +161,5 @@ ${technicalChangeBriefSection}
 DEMO PREP LOOP (use heavily for the demo/video story):
 ${demoPrepLoopSection}
 
-RAW DIFF:
-${input.rawDiff}`;
+${fenceUntrustedContent({ label: 'RAW DIFF', content: input.rawDiff })}${connectedSourceSection}`;
 }

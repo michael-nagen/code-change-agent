@@ -73,6 +73,21 @@ function fullResult(): AnalysisResult {
     spokenVersion: 'Yesterday I built the cache.',
   };
   r.dailyWorkGuidance = {
+    loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
+    selfCritique: {
+      issues: [
+        {
+          targetStepId: 'step-1',
+          issue: 'The step had no validation check.',
+          severity: 'medium',
+          suggestion: 'Add a concrete validation step.',
+        },
+      ],
+      revisionApplied: true,
+      summary: 'Revised the plan once before showing it.',
+      confidence: 'medium',
+      checkedAt: '2026-07-07T12:00:00.000Z',
+    },
     yesterdaySummary: 'Implemented the cache read path.',
     progressVsSpec: [
       {
@@ -477,6 +492,72 @@ test('Daily Work Guidance renders its sections and pending-approval steps', () =
   assert.match(g.html, /Implement LRU eviction/);
 });
 
+test('Daily Work Guidance renders cleanly without a self-review and with a no-revision one', () => {
+  const withoutCritique = fullResult();
+  delete withoutCritique.dailyWorkGuidance!.selfCritique;
+  const plain = byId(renderWorkspaceCards(withoutCritique), 'dailyWorkGuidance');
+  assert.equal(plain.html.includes('Plan Self-Review'), false);
+  assert.ok(plain.copyText);
+  assert.equal(plain.copyText.includes('## Plan self-review'), false);
+
+  const noRevision = fullResult();
+  noRevision.dailyWorkGuidance!.selfCritique = {
+    issues: [],
+    revisionApplied: false,
+    summary: 'The plan is sound.',
+    confidence: 'high',
+    checkedAt: '2026-07-07T12:00:00.000Z',
+  };
+  const reviewed = byId(renderWorkspaceCards(noRevision), 'dailyWorkGuidance');
+  assert.match(reviewed.html, /No revision needed/);
+  assert.match(reviewed.html, /No issues found\./);
+});
+
+test('Daily Work Guidance shows the plan self-review with its issues', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const g = byId(cards, 'dailyWorkGuidance');
+  assert.match(g.html, /Plan Self-Review/);
+  assert.match(g.html, /Plan revised once before showing you/);
+  assert.match(g.html, /The step had no validation check\./);
+  assert.match(g.html, /Suggestion: Add a concrete validation step\./);
+  assert.ok(g.copyText);
+  assert.match(g.copyText, /## Plan self-review/);
+});
+
+test('Daily Work Guidance shows the loop status and actionable decision controls', () => {
+  const cards = renderWorkspaceCards(fullResult());
+  const g = byId(cards, 'dailyWorkGuidance');
+  // The loop starts unreviewed and says so.
+  assert.match(g.html, /Loop Status/);
+  assert.match(g.html, /planning/);
+  assert.match(g.html, /pending_user_review/);
+  assert.match(g.html, /Recommendations are not final until you act/);
+  // Every pending item carries an approve\/reject\/edit\/defer picker.
+  assert.match(g.html, /data-decision-item=/);
+  assert.match(g.html, /data-decision-action/);
+  assert.match(g.html, /data-decision-edited/);
+  assert.match(g.html, /data-decision-note/);
+});
+
+test('Daily Work Guidance renders decided items with their statuses and no controls', () => {
+  const r = fullResult();
+  const g = r.dailyWorkGuidance;
+  assert.ok(g);
+  g.loopStatus = {
+    currentStage: 'approved_plan',
+    overallStatus: 'approved',
+    decidedAt: '2026-07-07T12:00:00.000Z',
+  };
+  for (const step of g.plannedSteps) step.status = 'approved';
+  for (const d of g.decisionsNeedingApproval) d.status = 'rejected';
+  const card = byId(renderWorkspaceCards(r), 'dailyWorkGuidance');
+  assert.match(card.html, /approved_plan/);
+  assert.match(card.html, /status-tag-approved/);
+  assert.match(card.html, /status-tag-rejected/);
+  // Decided items are settled — no pickers remain.
+  assert.equal(card.html.includes('data-decision-item'), false);
+});
+
 test('Daily Work Guidance offers full + Notion + per-prompt copy targets', () => {
   const cards = renderWorkspaceCards(fullResult());
   const g = byId(cards, 'dailyWorkGuidance');
@@ -550,7 +631,7 @@ test('Demo Prep Loop renders all ten sections and the manual-screenshot notice',
   assert.match(d.html, /Narration script:/);
 });
 
-test('Demo Prep Loop offers full + scoped + markdown-deck copy targets and a deck download', () => {
+test('Demo Prep Loop offers full + scoped + markdown-deck copy targets and deck downloads', () => {
   const cards = renderWorkspaceCards(fullResult());
   const d = byId(cards, 'demoPrepLoop');
   assert.ok(d.copyText, 'should have full-artifact copyText');
@@ -574,10 +655,27 @@ test('Demo Prep Loop offers full + scoped + markdown-deck copy targets and a dec
   assert.match(deck.text, /\n---\n/);
   assert.match(deck.text, /## Slide 1 — The cache entry model/);
   assert.match(deck.text, /Screenshot placeholder: shot-1/);
-  assert.ok(d.downloadAction, 'should offer the deck as a download');
-  assert.equal(d.downloadAction.label, 'Download deck (.md)');
-  assert.equal(d.downloadAction.filename, 'demo-deck.md');
-  assert.equal(d.downloadAction.text, deck.text);
+  assert.ok(d.downloadActions, 'should offer the deck as downloads');
+  assert.equal(d.downloadActions.length, 2);
+
+  const md = d.downloadActions.find((a) => a.filename === 'demo-deck.md');
+  assert.ok(md, 'missing markdown deck download');
+  assert.equal(md.label, 'Download deck (.md)');
+  assert.equal(md.mimeType, 'text/markdown');
+  assert.equal(md.text, deck.text);
+
+  const pptx = d.downloadActions.find((a) => a.filename === 'demo-deck.pptx');
+  assert.ok(pptx, 'missing PPTX deck download');
+  assert.equal(pptx.label, 'Download PPTX deck');
+  assert.equal(
+    pptx.mimeType,
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  );
+  assert.ok(pptx.base64, 'PPTX must travel as base64');
+  const bytes = Buffer.from(pptx.base64, 'base64');
+  assert.equal(bytes[0], 0x50); // 'P' — a ZIP archive
+  assert.equal(bytes[1], 0x4b); // 'K'
+  assert.ok(bytes.toString('utf8').includes('ppt/slides/slide1.xml'));
 });
 
 test('Weekly Review renders its major sections', () => {

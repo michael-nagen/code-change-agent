@@ -9,6 +9,8 @@
  *   marked as mock so it can never be mistaken for real AI output.
  */
 import type { AnalysisHarness, AnalysisResult } from '../analysis/index.js';
+import { buildNormalizedProjectContext } from '../sources/index.js';
+import { newTraceId } from '../observability/index.js';
 import type { AnalysisRequest, AnalysisRunner } from './types.js';
 
 const MOCK_TAG = '[DEMO/MOCK OUTPUT — not real AI]';
@@ -94,6 +96,9 @@ export class MockAnalysisRunner implements AnalysisRunner {
       // Echo a provided sessionId so the UI's on-demand generation keeps a
       // stable session across follow-up calls (matching the real harness).
       sessionId: request.sessionId ?? 'mock-session-0001',
+      // A trace id so the demo UI shows one even in mock mode. The real harness
+      // emits full structured logs under its own per-run trace id.
+      traceId: newTraceId(),
       requirementInput: {
         requirementText: request.requirementText,
         source: 'manual',
@@ -119,6 +124,48 @@ export class MockAnalysisRunner implements AnalysisRunner {
         confidence: 'low',
       },
     };
+
+    // Demo-only normalized project context so the Sources panel shows the full
+    // range of source kinds (manual spec/diff, memory, GitHub, Notion). These
+    // GitHub/Notion entries are SAMPLE data — nothing was actually fetched from
+    // any connector in mock mode. They are built by the same deterministic
+    // builder the real engine uses, drive no reasoning, and are clearly labelled
+    // so the UI never implies a real fetch happened.
+    const now = new Date().toISOString();
+    result.projectContext = buildNormalizedProjectContext({
+      manualRequirementText: request.requirementText,
+      manualDiffText: request.rawDiff,
+      memoryContext: {
+        userId: request.userId ?? 'local',
+        notes: [],
+        previousProgressMemory: `${MOCK_TAG} Prior progress carried in from the last run.`,
+      },
+      externalSources: [
+        {
+          source: {
+            kind: 'github',
+            title: `${MOCK_TAG} Sample pull request #42 (not fetched)`,
+            url: 'https://github.com/demo/repo/pull/42',
+            fetchedAt: now,
+            confidence: 'inferred',
+          },
+          text: `${MOCK_TAG} Sample pull request description and combined diff — not actually fetched from GitHub.`,
+          summary: `${MOCK_TAG} Sample GitHub pull request — mock data, not actually fetched.`,
+        },
+        {
+          source: {
+            kind: 'notion',
+            title: `${MOCK_TAG} Sample spec page (not fetched)`,
+            url: 'https://www.notion.so/demo-spec',
+            fetchedAt: now,
+            confidence: 'inferred',
+          },
+          text: `${MOCK_TAG} Sample Notion spec content — not actually fetched from Notion.`,
+          summary: `${MOCK_TAG} Sample Notion spec page — mock data, not actually fetched.`,
+        },
+      ],
+      now,
+    });
 
     if (request.includeFlow) {
       result.flowArtifact = {
@@ -183,6 +230,21 @@ export class MockAnalysisRunner implements AnalysisRunner {
     if (request.includeDailyWorkGuidance) {
       const date = new Date().toISOString().slice(0, 10);
       result.dailyWorkGuidance = {
+        loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
+        selfCritique: {
+          issues: [
+            {
+              targetStepId: 'step-1',
+              issue: `${MOCK_TAG} Demo issue: the step had no validation check.`,
+              severity: 'medium',
+              suggestion: `${MOCK_TAG} Demo suggestion: add a concrete validation step.`,
+            },
+          ],
+          revisionApplied: true,
+          summary: `${MOCK_TAG} Demo self-review: revised the plan once before showing it.`,
+          confidence: 'medium',
+          checkedAt: new Date().toISOString(),
+        },
         yesterdaySummary: `${MOCK_TAG} Demo summary of yesterday's work.`,
         progressVsSpec: [
           {

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AnalysisHarness } from '../AnalysisHarness.js';
+import { applyGuidanceDecisions } from '../applyGuidanceDecisions.js';
 import { InMemoryMemoryStore } from '../../memory/index.js';
 import type { MemoryStore, ProjectMemory, UserPreferencesMemory } from '../../memory/index.js';
 import type {
@@ -65,6 +66,7 @@ const GAP_REPORT: GapReport = {
 };
 
 const GUIDANCE: DailyWorkGuidance = {
+  loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Implemented the planning stage.',
   progressVsSpec: [
     {
@@ -250,6 +252,35 @@ test('user memory defaultGoal fills todayGoal only when none is provided', async
   assert.equal(input.todayGoal, 'Ship the MVP today');
 });
 
+test('user promptPreferences are rendered into the daily work guidance input', async () => {
+  const { skills, getLastGuidanceInput } = makeSkills();
+  const memoryStore = new InMemoryMemoryStore();
+  const userMemory: UserPreferencesMemory = {
+    schemaVersion: 1,
+    userId: 'local',
+    preferences: [],
+    promptPreferences: {
+      general: { preferredTone: 'concise' },
+      dailyUpdate: ['Notion-ready'],
+      cursor: ['task-first'],
+      // A category not requested by daily work guidance must NOT leak in.
+      codeReview: ['be blunt'],
+    },
+    updatedAt: '2026-07-06T00:00:00.000Z',
+  };
+  await memoryStore.saveUserMemory({ userId: 'local', memory: userMemory });
+
+  const harness = new AnalysisHarness({ ...skills, memoryStore });
+  await run(harness, { projectId: 'demo' });
+
+  const input = getLastGuidanceInput();
+  assert.ok(input?.userPromptPreferences);
+  assert.match(input.userPromptPreferences, /concise/);
+  assert.match(input.userPromptPreferences, /Notion-ready/);
+  assert.match(input.userPromptPreferences, /task-first/);
+  assert.equal(input.userPromptPreferences.includes('be blunt'), false);
+});
+
 test('saveProjectMemoryFromGuidance persists a snapshot that feeds the next run', async () => {
   const { skills, getLastGuidanceInput } = makeSkills();
   const memoryStore = new InMemoryMemoryStore();
@@ -271,6 +302,41 @@ test('saveProjectMemoryFromGuidance persists a snapshot that feeds the next run'
   const input = getLastGuidanceInput();
   assert.ok(input?.previousProgressMemory);
   assert.match(input.previousProgressMemory, /Planning done; ready to open PR/);
+});
+
+test('the full loop: run 1 → user decisions → saved memory → run 2 reloads the decided plan', async () => {
+  const { skills, getLastGuidanceInput } = makeSkills();
+  const memoryStore = new InMemoryMemoryStore();
+  const harness = new AnalysisHarness({ ...skills, memoryStore });
+
+  // Run 1 proposes a plan whose items are pending the user's approval.
+  const first = await run(harness, { projectId: 'demo' });
+  assert.ok(first.dailyWorkGuidance);
+  assert.equal(first.dailyWorkGuidance.loopStatus.currentStage, 'planning');
+  assert.equal(first.dailyWorkGuidance.plannedSteps[0]?.status, 'pending_approval');
+
+  // The user decides; the loop stage advances (stage N → stage N+1).
+  const { guidance: decided } = applyGuidanceDecisions({
+    guidance: first.dailyWorkGuidance,
+    decisions: [{ itemId: 'step-1', action: 'approve', note: 'Ship it' }],
+    decidedAt: '2026-07-07T12:00:00.000Z',
+  });
+  assert.equal(decided.loopStatus.currentStage, 'approved_plan');
+
+  // The decided plan is persisted as project memory.
+  await harness.saveProjectMemoryFromGuidance({ projectId: 'demo', guidance: decided });
+  const stored = await harness.getProjectMemory({ projectId: 'demo' });
+  assert.equal(stored?.latestSnapshot?.loopStage, 'approved_plan');
+  assert.deepEqual(stored?.latestSnapshot?.planDecisions, [
+    { itemId: 'step-1', action: 'approve', text: 'Open the PR', note: 'Ship it' },
+  ]);
+
+  // Run 2 for the same project reloads that memory into the skill's input.
+  await run(harness, { projectId: 'demo' });
+  const input = getLastGuidanceInput();
+  assert.ok(input?.previousProgressMemory);
+  assert.match(input.previousProgressMemory, /Plan loop stage: approved_plan/);
+  assert.match(input.previousProgressMemory, /\[approve\] step-1: Open the PR — Ship it/);
 });
 
 test('a failing memory store never crashes the analysis (fails open)', async () => {

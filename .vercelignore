@@ -3,9 +3,11 @@
 .env.local
 
 # Agent workspace files that are irrelevant to the deployed app.
-memory/
-builder-skill/
-docs/
+# Anchor with a leading slash so these only match the repo root and do NOT
+# accidentally strip source dirs like src/memory/.
+/memory/
+/builder-skill/
+/docs/
 .claude/
 .cursor/
 *.md

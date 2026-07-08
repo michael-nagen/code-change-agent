@@ -1,5 +1,6 @@
-import type { DeckSlide, ScreenshotPlanItem } from '../../skills/demoPrepLoop/index.js';
+import type { DeckSlide } from '../../skills/demoPrepLoop/index.js';
 import type { MarkdownDeckInput } from './types.js';
+import { slideVisualLines } from './slideVisuals.js';
 
 /**
  * Renders a deck plan as a Markdown presentation document: one section per
@@ -31,7 +32,7 @@ export function buildMarkdownDeck(input: MarkdownDeckInput): string {
     lines.push(`## Slide ${slide.slideNumber} — ${slide.title}`, '');
     lines.push(`**Purpose:** ${slide.purpose}`);
     lines.push(`**Visual:** ${slide.visualType}`, '');
-    lines.push(...visualPlaceholder({ slide, shotsById }), '');
+    lines.push(...slideVisualLines({ slide, shotsById }).map((line) => `> ${line}`), '');
     lines.push('**On slide:**');
     if (slide.onSlideText.length === 0) {
       lines.push('- (no on-slide text)');
@@ -55,32 +56,6 @@ function metadataContextLine(metadata: MarkdownDeckInput['metadata']): string | 
     parts.push(`Date: ${metadata.date}`);
   }
   return parts.length > 0 ? `_${parts.join(' · ')}_` : undefined;
-}
-
-function visualPlaceholder({
-  slide,
-  shotsById,
-}: {
-  slide: DeckSlide;
-  shotsById: Map<string, ScreenshotPlanItem>;
-}): string[] {
-  const ids = slide.screenshotIds ?? [];
-  if (ids.length === 0) {
-    return [`> [Visual placeholder: ${slide.visualType} — ${slide.whatToShow}]`];
-  }
-
-  const lines: string[] = [];
-  for (const id of ids) {
-    const shot = shotsById.get(id);
-    if (shot === undefined) {
-      lines.push(`> [Screenshot placeholder: ${id} — not found in the screenshot plan]`);
-      continue;
-    }
-    lines.push(`> [Screenshot placeholder: ${id} — "${shot.title}"]`);
-    lines.push(`> Capture: ${shot.whatToCapture}`);
-    lines.push(`> Caption: ${shot.suggestedCaption}`);
-  }
-  return lines;
 }
 
 function slideFooter(slide: DeckSlide): string {

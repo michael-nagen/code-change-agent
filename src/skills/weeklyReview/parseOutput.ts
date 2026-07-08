@@ -123,10 +123,13 @@ function validateSpecItem(entry: Record<string, unknown>): SpecProgressItem {
   };
 }
 
-function validateTechnicalChangeItems(
-  obj: Record<string, unknown>,
-  key: string,
-): TechnicalChangeItem[] {
+function validateTechnicalChangeItems({
+  obj,
+  key,
+}: {
+  obj: Record<string, unknown>;
+  key: string;
+}): TechnicalChangeItem[] {
   return requireObjectArray({ obj, key }).map((entry) => {
     const filePath = optionalNestedString({ entry, label: key, field: 'filePath' });
     const item: TechnicalChangeItem = {
@@ -140,11 +143,11 @@ function validateTechnicalChangeItems(
 
 function validateWhatChangedTechnically(obj: Record<string, unknown>): WhatChangedTechnically {
   return {
-    schemaOrDataChanges: validateTechnicalChangeItems(obj, 'schemaOrDataChanges'),
-    modelOrTypeChanges: validateTechnicalChangeItems(obj, 'modelOrTypeChanges'),
-    workflowOrRuntimeChanges: validateTechnicalChangeItems(obj, 'workflowOrRuntimeChanges'),
-    uiChanges: validateTechnicalChangeItems(obj, 'uiChanges'),
-    toolsOrSkillsAdded: validateTechnicalChangeItems(obj, 'toolsOrSkillsAdded'),
+    schemaOrDataChanges: validateTechnicalChangeItems({ obj, key: 'schemaOrDataChanges' }),
+    modelOrTypeChanges: validateTechnicalChangeItems({ obj, key: 'modelOrTypeChanges' }),
+    workflowOrRuntimeChanges: validateTechnicalChangeItems({ obj, key: 'workflowOrRuntimeChanges' }),
+    uiChanges: validateTechnicalChangeItems({ obj, key: 'uiChanges' }),
+    toolsOrSkillsAdded: validateTechnicalChangeItems({ obj, key: 'toolsOrSkillsAdded' }),
     importantFilesOrModules: requireStringArray({ obj, key: 'importantFilesOrModules' }),
   };
 }
@@ -203,10 +206,13 @@ function validateWeeklyUpdate(obj: Record<string, unknown>): SuggestedWeeklyUpda
   };
 }
 
-function validateChecklistStatuses(
-  obj: Record<string, unknown>,
-  key: string,
-): WeeklyChecklistStatus[] {
+function validateChecklistStatuses({
+  obj,
+  key,
+}: {
+  obj: Record<string, unknown>;
+  key: string;
+}): WeeklyChecklistStatus[] {
   return requireObjectArray({ obj, key }).map((entry) => ({
     item: requireNestedString({ entry, label: key, field: 'item' }),
     status: requireNestedString({ entry, label: key, field: 'status' }),
@@ -216,7 +222,7 @@ function validateChecklistStatuses(
 function validateMemoryProposal(obj: Record<string, unknown>): WeeklyMemoryUpdateProposal {
   return {
     latestWeeklySummary: requireString({ obj, key: 'latestWeeklySummary' }),
-    updatedChecklistStatuses: validateChecklistStatuses(obj, 'updatedChecklistStatuses'),
+    updatedChecklistStatuses: validateChecklistStatuses({ obj, key: 'updatedChecklistStatuses' }),
     newDecisions: requireStringArray({ obj, key: 'newDecisions' }),
     updatedBlockers: requireStringArray({ obj, key: 'updatedBlockers' }),
     nextActions: requireStringArray({ obj, key: 'nextActions' }),

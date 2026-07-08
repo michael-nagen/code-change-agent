@@ -8,6 +8,7 @@ import type { AnalysisResult } from '../../analysis/index.js';
 import type { DailyWorkGuidance } from '../../skills/dailyWorkGuidance/index.js';
 
 const GUIDANCE: DailyWorkGuidance = {
+  loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Built planning.',
   progressVsSpec: [],
   advancedChecklistItems: [],

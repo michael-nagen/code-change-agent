@@ -13,6 +13,7 @@ import { API_LINES } from './api.js';
 import { OVERVIEW_FORMATTER_LINES } from './overviewFormatter.js';
 import { NAVIGATION_LINES } from './navigationController.js';
 import { WORKSPACE_LINES } from './workspaceController.js';
+import { COMMAND_CENTER_LINES } from './commandCenterController.js';
 import { CHAT_LINES } from './chatController.js';
 import { EVENTS_LINES } from './events.js';
 
@@ -25,6 +26,7 @@ export function clientScript(): string {
     ...OVERVIEW_FORMATTER_LINES,
     ...NAVIGATION_LINES,
     ...WORKSPACE_LINES,
+    ...COMMAND_CENTER_LINES,
     ...CHAT_LINES,
     ...EVENTS_LINES,
   ].join('\n');

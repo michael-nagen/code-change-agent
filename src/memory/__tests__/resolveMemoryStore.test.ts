@@ -9,9 +9,31 @@ import {
 } from '../resolveMemoryStore.js';
 import { InMemoryMemoryStore } from '../InMemoryMemoryStore.js';
 import { JsonFileMemoryStore } from '../JsonFileMemoryStore.js';
+import { DbMemoryStore } from '../DbMemoryStore.js';
+import { MemoryStoreError } from '../../errors/MemoryStoreError.js';
 
 test('defaults to the durable file store', () => {
   const store = resolveMemoryStore({});
+  assert.ok(store instanceof JsonFileMemoryStore);
+});
+
+test('MEMORY_STORE=db selects the DB store when DATABASE_URL is set', () => {
+  const store = resolveMemoryStore({
+    MEMORY_STORE: 'db',
+    DATABASE_URL: 'postgres://user:pass@localhost:5432/app',
+  });
+  assert.ok(store instanceof DbMemoryStore);
+});
+
+test('MEMORY_STORE=db without DATABASE_URL throws a clear CONFIG error', () => {
+  assert.throws(
+    () => resolveMemoryStore({ MEMORY_STORE: 'db' }),
+    (err: unknown) => err instanceof MemoryStoreError && err.code === 'CONFIG',
+  );
+});
+
+test('DATABASE_URL is ignored unless MEMORY_STORE=db', () => {
+  const store = resolveMemoryStore({ DATABASE_URL: 'postgres://ignored/db' });
   assert.ok(store instanceof JsonFileMemoryStore);
 });
 

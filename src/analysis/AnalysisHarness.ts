@@ -41,6 +41,10 @@ import {
   type DailyWorkGuidanceSkill,
 } from '../skills/dailyWorkGuidance/index.js';
 import {
+  DefaultGuidanceCritiqueSkill,
+  type GuidanceCritiqueSkill,
+} from '../skills/dailyWorkGuidanceCritique/index.js';
+import {
   DefaultTechnicalChangeBriefSkill,
   type TechnicalChangeBriefSkill,
 } from '../skills/technicalChangeBrief/index.js';
@@ -68,6 +72,19 @@ import type {
 } from '../memory/index.js';
 import type { DailyWorkGuidance } from '../skills/dailyWorkGuidance/index.js';
 import type { WeeklyReview } from '../skills/weeklyReview/index.js';
+import {
+  buildNormalizedProjectContext,
+  resolveExternalSources,
+} from '../sources/index.js';
+import type { NotionConnector, GitHubConnector } from '../sources/index.js';
+import {
+  logEvent,
+  runWithTrace,
+  updateTraceContext,
+  newTraceId,
+  startTimer,
+  describeErrorForLog,
+} from '../observability/index.js';
 import { snapshotFromDailyWorkGuidance, snapshotFromWeeklyReview } from './memoryMapping.js';
 import { DefaultSkillRegistry } from './DefaultSkillRegistry.js';
 import { InMemoryArtifactStore } from './InMemoryArtifactStore.js';
@@ -111,6 +128,8 @@ export interface AnalysisHarnessDeps {
   prDescription?: PRDescriptionSkill;
   dailyUpdate?: DailyUpdateSkill;
   dailyWorkGuidance?: DailyWorkGuidanceSkill;
+  /** Self-critique pass over the generated guidance plan; optional like the rest. */
+  dailyWorkGuidanceCritique?: GuidanceCritiqueSkill;
   technicalChangeBrief?: TechnicalChangeBriefSkill;
   demoPrepLoop?: DemoPrepLoopSkill;
   weeklyReview?: WeeklyReviewSkill;
@@ -128,11 +147,49 @@ export interface AnalysisHarnessDeps {
    * `MemoryStore` interface, never on how memory is stored.
    */
   memoryStore?: MemoryStore;
+  /**
+   * Optional external-source connectors. When provided (via `resolveConnectors`
+   * from env), the harness assembles a unified project context behind the
+   * scenes. Absent by default, so manual flows are unchanged. The harness
+   * depends only on the connector interfaces, never on a concrete provider.
+   */
+  notionConnector?: NotionConnector;
+  githubConnector?: GitHubConnector;
+  /** Default source ids/urls used when a run does not pass its own. */
+  sourceDefaults?: { notionPageId?: string; githubPrUrl?: string };
   requirementAdapter?: RequirementInputAdapter;
   /** Input adapter for git-sourced analysis; defaults to wrapping the real tool. */
   gitInputAdapter?: GitInputAdapter;
   /** Bidirectional Notion plugin; defaults to the in-memory/text implementation. */
   notionPlugin?: NotionPlugin;
+}
+
+/** Parameters for a single analysis run. Extracted so the public trace wrapper
+ * and the traced implementation share one contract. */
+export interface RunAnalysisParams {
+  projectId?: string;
+  /** Owner of the memory to load/save. Defaults to the single MVP user. */
+  userId?: string;
+  rawDiff: string;
+  requirementText: string;
+  sessionId?: string;
+  /** Optional prior-session progress memory, used by daily-work-guidance. */
+  previousProgressMemory?: string;
+  /** Optional goal for today, used by daily-work-guidance. */
+  todayGoal?: string;
+  /** Optional Notion page id/URL to read as an external source this run. */
+  notionPageId?: string;
+  /** Optional GitHub PR/commit URL to read as an external source this run. */
+  githubPrUrl?: string;
+  includeFlow?: boolean;
+  includeGapReport?: boolean;
+  includeVideoScript?: boolean;
+  includePrDescription?: boolean;
+  includeDailyUpdate?: boolean;
+  includeDailyWorkGuidance?: boolean;
+  includeTechnicalChangeBrief?: boolean;
+  includeDemoPrepLoop?: boolean;
+  includeWeeklyReview?: boolean;
 }
 
 /**
@@ -148,6 +205,9 @@ export class AnalysisHarness {
   private readonly store: ArtifactStore;
   private readonly projectStore: ProjectStore;
   private readonly memoryStore: MemoryStore;
+  private readonly notionConnector?: NotionConnector;
+  private readonly githubConnector?: GitHubConnector;
+  private readonly sourceDefaults: { notionPageId?: string; githubPrUrl?: string };
   private readonly requirementAdapter: RequirementInputAdapter;
   private readonly gitInputAdapter: GitInputAdapter;
   private readonly notionPlugin: NotionPlugin;
@@ -215,6 +275,11 @@ export class AnalysisHarness {
       makeDefault: (m) => new DefaultDailyWorkGuidanceSkill(m),
     });
     registerSkill({
+      key: 'dailyWorkGuidanceCritique',
+      provided: deps.dailyWorkGuidanceCritique,
+      makeDefault: (m) => new DefaultGuidanceCritiqueSkill(m),
+    });
+    registerSkill({
       key: 'technicalChangeBrief',
       provided: deps.technicalChangeBrief,
       makeDefault: (m) => new DefaultTechnicalChangeBriefSkill(m),
@@ -234,6 +299,9 @@ export class AnalysisHarness {
     this.store = deps.store ?? new InMemoryArtifactStore();
     this.projectStore = deps.projectStore ?? new InMemoryProjectStore();
     this.memoryStore = deps.memoryStore ?? new InMemoryMemoryStore();
+    if (deps.notionConnector !== undefined) this.notionConnector = deps.notionConnector;
+    if (deps.githubConnector !== undefined) this.githubConnector = deps.githubConnector;
+    this.sourceDefaults = deps.sourceDefaults ?? {};
     this.requirementAdapter = deps.requirementAdapter ?? new ManualRequirementInputAdapter();
     this.gitInputAdapter = deps.gitInputAdapter ?? new DefaultGitInputAdapter();
     this.notionPlugin = deps.notionPlugin ?? createNotionPlugin();
@@ -244,8 +312,47 @@ export class AnalysisHarness {
    *
    * Pass a `sessionId` of a previous run to continue it: any artifacts already
    * present are reused and their skills are not called again.
+   *
+   * Establishes a per-run trace context (`traceId`) so every step, model call,
+   * memory, and self-critique event emitted during the run shares that id. This
+   * is observability only — it does not change what the run produces.
    */
-  async runAnalysis({
+  async runAnalysis(params: RunAnalysisParams): Promise<AnalysisResult> {
+    const traceId = newTraceId();
+    return runWithTrace({ traceId }, async () => {
+      const stopRunTimer = startTimer();
+      logEvent({
+        event: 'run_started',
+        fields: {
+          ...(params.projectId !== undefined ? { projectId: params.projectId } : {}),
+          reusingSession: params.sessionId !== undefined,
+          requestedOutputs: requestedOutputs(params),
+        },
+      });
+      try {
+        const result = await this.executeAnalysis(params);
+        result.traceId = traceId;
+        logEvent({
+          event: 'run_completed',
+          fields: {
+            durationMs: stopRunTimer(),
+            artifactsProduced: producedArtifacts(result),
+            selfCritiqueApplied: result.dailyWorkGuidance?.selfCritique?.revisionApplied ?? false,
+          },
+        });
+        return result;
+      } catch (err) {
+        logEvent({
+          event: 'run_failed',
+          level: 'error',
+          fields: { durationMs: stopRunTimer(), ...describeErrorForLog(err) },
+        });
+        throw err;
+      }
+    });
+  }
+
+  private async executeAnalysis({
     projectId,
     userId,
     rawDiff,
@@ -253,6 +360,8 @@ export class AnalysisHarness {
     sessionId,
     previousProgressMemory,
     todayGoal,
+    notionPageId,
+    githubPrUrl,
     includeFlow = true,
     includeGapReport = true,
     includeVideoScript = false,
@@ -262,27 +371,7 @@ export class AnalysisHarness {
     includeTechnicalChangeBrief = false,
     includeDemoPrepLoop = false,
     includeWeeklyReview = false,
-  }: {
-    projectId?: string;
-    /** Owner of the memory to load/save. Defaults to the single MVP user. */
-    userId?: string;
-    rawDiff: string;
-    requirementText: string;
-    sessionId?: string;
-    /** Optional prior-session progress memory, used by daily-work-guidance. */
-    previousProgressMemory?: string;
-    /** Optional goal for today, used by daily-work-guidance. */
-    todayGoal?: string;
-    includeFlow?: boolean;
-    includeGapReport?: boolean;
-    includeVideoScript?: boolean;
-    includePrDescription?: boolean;
-    includeDailyUpdate?: boolean;
-    includeDailyWorkGuidance?: boolean;
-    includeTechnicalChangeBrief?: boolean;
-    includeDemoPrepLoop?: boolean;
-    includeWeeklyReview?: boolean;
-  }): Promise<AnalysisResult> {
+  }: RunAnalysisParams): Promise<AnalysisResult> {
     this.assertNonEmpty({ field: 'rawDiff', value: rawDiff });
     this.assertNonEmpty({ field: 'requirementText', value: requirementText });
     assertWorkflowIncludeFlags({
@@ -298,6 +387,12 @@ export class AnalysisHarness {
     });
 
     const { session, reused } = this.loadOrCreateSession({ rawDiff, sessionId, projectId });
+    // Now that the session id is known, stamp it (and the project id) onto the
+    // trace so every subsequent step/memory/model event in this run carries it.
+    updateTraceContext({
+      sessionId: session.sessionId,
+      ...(projectId !== undefined ? { projectId } : {}),
+    });
     if (reused) {
       await this.assertReusedSessionInputsMatch({ session, rawDiff, requirementText });
     }
@@ -308,6 +403,7 @@ export class AnalysisHarness {
     const resolvedPreviousProgress =
       previousProgressMemory ?? memoryContext?.previousProgressMemory;
     const resolvedTodayGoal = todayGoal ?? memoryContext?.userPreferences?.defaultGoal;
+    const resolvedPromptPreferences = memoryContext?.userPreferences?.promptPreferences;
 
     if (resolvedPreviousProgress !== undefined) {
       session.inputs.previousProgressMemory = resolvedPreviousProgress;
@@ -315,6 +411,33 @@ export class AnalysisHarness {
     if (resolvedTodayGoal !== undefined) {
       session.inputs.todayGoal = resolvedTodayGoal;
     }
+    if (resolvedPromptPreferences !== undefined) {
+      session.inputs.promptPreferences = resolvedPromptPreferences;
+    }
+
+    // Assemble the unified project context behind the scenes: manual input
+    // (source of truth) + memory (supporting) + any configured external sources.
+    // External source resolution is fail-open, so manual flows never break.
+    const resolvedNotionPageId = resolveId({
+      perRun: notionPageId,
+      fallback: this.sourceDefaults.notionPageId,
+    });
+    const resolvedGithubPrUrl = resolveId({
+      perRun: githubPrUrl,
+      fallback: this.sourceDefaults.githubPrUrl,
+    });
+    const { sources: externalSources } = await resolveExternalSources({
+      ...(this.notionConnector !== undefined ? { notionConnector: this.notionConnector } : {}),
+      ...(this.githubConnector !== undefined ? { githubConnector: this.githubConnector } : {}),
+      ...(resolvedNotionPageId !== undefined ? { notionPageId: resolvedNotionPageId } : {}),
+      ...(resolvedGithubPrUrl !== undefined ? { githubPrUrl: resolvedGithubPrUrl } : {}),
+    });
+    session.inputs.projectContext = buildNormalizedProjectContext({
+      manualRequirementText: requirementText,
+      manualDiffText: rawDiff,
+      ...(memoryContext !== undefined ? { memoryContext } : {}),
+      externalSources,
+    });
 
     await runAnalyzeCodeChange({
       session,
@@ -570,14 +693,25 @@ export class AnalysisHarness {
         this.memoryStore.getUserMemory({ userId: resolvedUserId }),
         this.memoryStore.getProjectMemory({ userId: resolvedUserId, projectId }),
       ]);
-      return buildDeveloperMemoryContext({
+      const context = buildDeveloperMemoryContext({
         userId: resolvedUserId,
         projectId,
         ...(userPreferences !== undefined ? { userMemory: userPreferences } : {}),
         ...(projectMemory !== undefined ? { projectMemory } : {}),
       });
-    } catch {
+      logEvent({
+        event: 'memory_loaded',
+        fields: {
+          userMemoryPresent: userPreferences !== undefined,
+          projectMemoryPresent: projectMemory !== undefined,
+          hasPreviousProgress: context.previousProgressMemory !== undefined,
+          snapshotHistoryCount: projectMemory?.history.length ?? 0,
+        },
+      });
+      return context;
+    } catch (err) {
       // Fail open: memory is supporting context, not a source of truth.
+      logEvent({ event: 'memory_loaded', level: 'warn', fields: { loaded: false, ...describeErrorForLog(err) } });
       return undefined;
     }
   }
@@ -610,14 +744,15 @@ export class AnalysisHarness {
     return this.memoryStore.getUserMemory({ userId: userId ?? DEFAULT_USER_ID });
   }
 
-  saveUserMemory({
+  async saveUserMemory({
     userId,
     memory,
   }: {
     userId?: string;
     memory: UserPreferencesMemory;
   }): Promise<void> {
-    return this.memoryStore.saveUserMemory({ userId: userId ?? DEFAULT_USER_ID, memory });
+    await this.memoryStore.saveUserMemory({ userId: userId ?? DEFAULT_USER_ID, memory });
+    logEvent({ event: 'memory_saved', fields: { scope: 'user' } });
   }
 
   getProjectMemory({
@@ -630,7 +765,7 @@ export class AnalysisHarness {
     return this.memoryStore.getProjectMemory({ userId: userId ?? DEFAULT_USER_ID, projectId });
   }
 
-  saveProjectMemory({
+  async saveProjectMemory({
     userId,
     projectId,
     memory,
@@ -639,10 +774,14 @@ export class AnalysisHarness {
     projectId: string;
     memory: ProjectMemory;
   }): Promise<void> {
-    return this.memoryStore.saveProjectMemory({
+    await this.memoryStore.saveProjectMemory({
       userId: userId ?? DEFAULT_USER_ID,
       projectId,
       memory,
+    });
+    logEvent({
+      event: 'memory_saved',
+      fields: { scope: 'project', projectId, snapshotHistoryCount: memory.history.length },
     });
   }
 
@@ -677,6 +816,16 @@ export class AnalysisHarness {
       ...(now !== undefined ? { now } : {}),
     });
     await this.memoryStore.saveProjectMemory({ userId: resolvedUserId, projectId, memory });
+    logEvent({
+      event: 'memory_saved',
+      fields: {
+        scope: 'project',
+        projectId,
+        source: 'dailyWorkGuidance',
+        snapshotDate: snapshot.date,
+        snapshotHistoryCount: memory.history.length,
+      },
+    });
     return memory;
   }
 
@@ -710,6 +859,16 @@ export class AnalysisHarness {
       ...(now !== undefined ? { now } : {}),
     });
     await this.memoryStore.saveProjectMemory({ userId: resolvedUserId, projectId, memory });
+    logEvent({
+      event: 'memory_saved',
+      fields: {
+        scope: 'project',
+        projectId,
+        source: 'weeklyReview',
+        snapshotDate: snapshot.date,
+        snapshotHistoryCount: memory.history.length,
+      },
+    });
     return memory;
   }
 
@@ -839,6 +998,9 @@ export class AnalysisHarness {
     if (session.artifacts.weeklyReview !== undefined) {
       result.weeklyReview = session.artifacts.weeklyReview;
     }
+    if (session.inputs.projectContext !== undefined) {
+      result.projectContext = session.inputs.projectContext;
+    }
 
     return result;
   }
@@ -848,6 +1010,51 @@ export class AnalysisHarness {
       throw new HarnessError('VALIDATION', `${field} must not be empty.`);
     }
   }
+}
+
+/** The requested optional outputs for a run, as booleans — safe to log (no content). */
+function requestedOutputs(params: RunAnalysisParams): Record<string, boolean> {
+  return {
+    flow: params.includeFlow ?? true,
+    gapReport: params.includeGapReport ?? true,
+    videoScript: params.includeVideoScript ?? false,
+    prDescription: params.includePrDescription ?? false,
+    dailyUpdate: params.includeDailyUpdate ?? false,
+    dailyWorkGuidance: params.includeDailyWorkGuidance ?? false,
+    technicalChangeBrief: params.includeTechnicalChangeBrief ?? false,
+    demoPrepLoop: params.includeDemoPrepLoop ?? false,
+    weeklyReview: params.includeWeeklyReview ?? false,
+  };
+}
+
+/** The artifact keys actually produced on a result — names only, never content. */
+function producedArtifacts(result: AnalysisResult): string[] {
+  const keys: (keyof AnalysisResult)[] = [
+    'changeExplanation',
+    'requirementAlignment',
+    'flowArtifact',
+    'gapReport',
+    'prDescription',
+    'videoScript',
+    'dailyUpdate',
+    'dailyWorkGuidance',
+    'technicalChangeBrief',
+    'demoPrepLoop',
+    'weeklyReview',
+  ];
+  return keys.filter((key) => result[key] !== undefined);
+}
+
+/** Prefer a per-run source id/url over the configured default; trim to undefined. */
+function resolveId({
+  perRun,
+  fallback,
+}: {
+  perRun: string | undefined;
+  fallback: string | undefined;
+}): string | undefined {
+  const chosen = perRun !== undefined && perRun.trim() !== '' ? perRun : fallback;
+  return chosen !== undefined && chosen.trim() !== '' ? chosen : undefined;
 }
 
 type NotionInclude = {

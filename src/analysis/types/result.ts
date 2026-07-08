@@ -16,9 +16,16 @@ import type { DailyWorkGuidance } from '../../skills/dailyWorkGuidance/index.js'
 import type { TechnicalChangeBrief } from '../../skills/technicalChangeBrief/index.js';
 import type { DemoPrepLoop } from '../../skills/demoPrepLoop/index.js';
 import type { WeeklyReview } from '../../skills/weeklyReview/index.js';
+import type { NormalizedProjectContext } from '../../sources/index.js';
 
 export interface AnalysisResult {
   sessionId: string;
+  /**
+   * Observability id for the run that produced this result. Present when the
+   * result came through the harness (which establishes a per-run trace); it is
+   * safe to display and lets a UI/log correlate the run end-to-end.
+   */
+  traceId?: string;
   requirementInput: RequirementInput;
   changeExplanation: ChangeExplanation;
   requirementAlignment: RequirementAlignment;
@@ -40,4 +47,10 @@ export interface AnalysisResult {
   demoPrepLoop?: DemoPrepLoop;
   /** Present when the optional weekly-review step ran. */
   weeklyReview?: WeeklyReview;
+  /**
+   * The unified project context assembled for this run (manual input + memory +
+   * configured external sources). Always built; external sources appear only
+   * when connectors are configured.
+   */
+  projectContext?: NormalizedProjectContext;
 }

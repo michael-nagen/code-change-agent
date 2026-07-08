@@ -20,6 +20,8 @@ import type { DailyWorkGuidance } from '../../skills/dailyWorkGuidance/index.js'
 import type { TechnicalChangeBrief } from '../../skills/technicalChangeBrief/index.js';
 import type { DemoPrepLoop } from '../../skills/demoPrepLoop/index.js';
 import type { WeeklyReview } from '../../skills/weeklyReview/index.js';
+import type { PromptPreferences } from '../../memory/index.js';
+import type { NormalizedProjectContext } from '../../sources/index.js';
 
 /** The ordered steps of the AnalyzeCodeChange workflow. */
 export type WorkflowStepName =
@@ -50,6 +52,20 @@ export interface AnalysisInputs {
   previousProgressMemory?: string;
   /** An optional goal for today, forwarded to the daily-work-guidance step. */
   todayGoal?: string;
+  /**
+   * The developer's structured personal working / prompt preferences, loaded
+   * from user memory. Supporting FORMAT/STYLE/WORKFLOW context only — the
+   * current spec/diff remains the source of truth for factual claims. Forwarded
+   * to the output-style-aware skills (daily/technical/demo/weekly).
+   */
+  promptPreferences?: PromptPreferences;
+  /**
+   * The unified project context (manual input + memory + configured external
+   * sources) assembled behind the scenes. Supporting context; the manual
+   * diff/requirement remain the source of truth. Available to current/future
+   * artifacts via the session.
+   */
+  projectContext?: NormalizedProjectContext;
 }
 
 /**

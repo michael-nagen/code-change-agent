@@ -4,3 +4,4 @@
  * package's public surface).
  */
 export { renderWorkspaceCards, prDescriptionToMarkdown } from './model/renderArtifacts.js';
+export { summarizeGuidance } from './model/guidanceSummary.js';

@@ -46,6 +46,18 @@ export interface WeeklyReviewInput {
   demoPrepLoop?: DemoPrepLoop;
   /** Prior project progress carried in from memory, when available. */
   previousProgressMemory?: string;
+  /**
+   * A pre-rendered block of the developer's personal working / prompt
+   * preferences (weekly review, mentor/manager update, and demo/video style). It
+   * shapes how the review READS only — never the factual claims it synthesizes.
+   */
+  userPromptPreferences?: string;
+  /**
+   * A pre-rendered block of connected source context (GitHub/Notion/memory)
+   * assembled from the session's project context. SUPPORTING context only — the
+   * current run's explicit inputs remain the source of truth over it.
+   */
+  connectedSourceContext?: string;
 }
 
 export type WeeklyReviewStatusValue = 'draft';

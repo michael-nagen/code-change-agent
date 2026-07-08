@@ -1,4 +1,8 @@
 import type { RequirementAlignmentInput } from './types.js';
+import {
+  UNTRUSTED_CONTENT_SAFETY_INSTRUCTION,
+  fenceUntrustedContent,
+} from '../shared/untrustedContent.js';
 
 /**
  * Reasoning constraints encoded in the prompt:
@@ -8,17 +12,26 @@ import type { RequirementAlignmentInput } from './types.js';
  *  - rawDiff is optional secondary evidence, included only when provided
  *  - uncertainty over hallucination
  *  - JSON output matching the RequirementAlignment schema
+ *
+ * The requirement text and raw diff are untrusted source content, so they are
+ * fenced and preceded by the shared safety preamble; the ChangeExplanation is a
+ * validated upstream artifact and stays outside the fence.
  */
 export function buildPrompt(input: RequirementAlignmentInput): string {
   const explanationJson = JSON.stringify(input.changeExplanation, null, 2);
 
   const diffSection =
     input.rawDiff !== undefined
-      ? `RAW DIFF (secondary evidence — consult only to resolve specific uncertainties not already answered by the Change Explanation above):
-${input.rawDiff}`
+      ? fenceUntrustedContent({
+          label:
+            'RAW DIFF (secondary evidence — consult only to resolve specific uncertainties not already answered by the Change Explanation above)',
+          content: input.rawDiff,
+        })
       : `RAW DIFF: Not provided. Reason only from the Requirement and Change Explanation above.`;
 
   return `You are a requirement alignment analyst. Your only task is to evaluate whether the implemented change satisfies the original requirement.
+
+${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 GUIDING PRINCIPLES:
 - You are an ALIGNMENT EVALUATOR, not a diff analyzer. Treat the Change Explanation as a finished, authoritative artifact describing what was implemented. Do NOT regenerate, re-derive, or re-explain the change.
@@ -61,8 +74,7 @@ Confidence guide:
 - "medium" — Requirement is mostly clear but some assumptions are required to draw conclusions.
 - "low"    — Requirement is ambiguous or alignment cannot be confidently determined from available evidence.
 
-REQUIREMENT:
-${input.requirementText}
+${fenceUntrustedContent({ label: 'REQUIREMENT', content: input.requirementText })}
 
 CHANGE EXPLANATION (primary evidence):
 ${explanationJson}

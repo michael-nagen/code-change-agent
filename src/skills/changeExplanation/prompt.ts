@@ -1,4 +1,8 @@
 import type { ChangeExplanationInput } from './types.js';
+import {
+  UNTRUSTED_CONTENT_SAFETY_INSTRUCTION,
+  fenceUntrustedContent,
+} from '../shared/untrustedContent.js';
 
 /**
  * Reasoning constraints encoded in the prompt:
@@ -6,9 +10,14 @@ import type { ChangeExplanationInput } from './types.js';
  *  - capabilities, not code volume
  *  - uncertainty over hallucination
  *  - JSON output matching the ChangeExplanation schema
+ *
+ * The git diff is untrusted source content, so it is fenced and preceded by the
+ * shared safety preamble: it is data to analyze, never instructions to obey.
  */
 export function buildPrompt(input: ChangeExplanationInput): string {
   return `You are a code change analyst. Analyze the following git diff and produce a structured explanation of the change.
+
+${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 GUIDING PRINCIPLES:
 - Explain system BEHAVIOR, not files. Say "The system now supports X", not "Modified file.ts".
@@ -46,6 +55,5 @@ Return ONLY a valid JSON object — no markdown fences, no explanation text — 
   ]
 }
 
-GIT DIFF:
-${input.diff}`;
+${fenceUntrustedContent({ label: 'GIT DIFF', content: input.diff })}`;
 }

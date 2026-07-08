@@ -15,15 +15,23 @@
  * toggle. Card bodies are rendered server-side (features/artifactViews).
  *
  * This file is composition only. The pieces live alongside it:
- *   - styles.ts               the stylesheet
- *   - features/appShell        the header + mode banner
- *   - features/analysisInput   the source + requirement input area
- *   - features/analysisWorkspace the status card + master/detail mount points
- *   - client/*                the inline browser app, split by responsibility
+ *   - styles.ts                   the stylesheet
+ *   - features/appShell           the header + mode banner
+ *   - features/projectCommandCenter the connected-project home + one-click actions
+ *   - features/analysisInput      the source + requirement input area (now
+ *                                 collapsed into an "Advanced / Manual Input"
+ *                                 section — the daily flow runs from the
+ *                                 Command Center instead of this form)
+ *   - features/analysisWorkspace  the status card + master/detail mount points
+ *   - client/*                    the inline browser app, split by responsibility
+ *
+ * The `data-ui-mode` attribute on `.wrap` lets the client know at load whether
+ * it is in mock or real mode (so mock can show a pre-connected sample project).
  */
 import type { UiMode } from './types.js';
 import { STYLES } from './styles.js';
 import { appShell } from './features/appShell/index.js';
+import { commandCenter } from './features/projectCommandCenter/index.js';
 import { analysisInput } from './features/analysisInput/index.js';
 import { statusSection, workspaceShell } from './features/analysisWorkspace/index.js';
 import { clientScript } from './client/index.js';
@@ -39,10 +47,15 @@ export function renderPage({ mode }: { mode: UiMode }): string {
 <style>${STYLES}</style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap" data-ui-mode="${mode}">
 ${appShell(mode)}
 
+${commandCenter()}
+
+<details id="advanced-input" class="advanced-input">
+  <summary>Advanced / Manual Input — first-time setup or override</summary>
 ${analysisInput()}
+</details>
 
 ${statusSection()}
 

@@ -30,7 +30,7 @@ import type { DailyWorkGuidance } from '../../../../skills/dailyWorkGuidance/ind
 import type { TechnicalChangeBrief } from '../../../../skills/technicalChangeBrief/index.js';
 import type { DemoPrepLoop } from '../../../../skills/demoPrepLoop/index.js';
 import type { WeeklyReview } from '../../../../skills/weeklyReview/index.js';
-import { buildMarkdownDeck } from '../../../../tools/presentation/index.js';
+import { buildMarkdownDeck, buildPptxDeck } from '../../../../tools/presentation/index.js';
 import {
   prDescriptionToMarkdown,
   dailyWorkGuidanceToMarkdown,
@@ -96,6 +96,17 @@ function demoPrepLoopDeckMarkdown(x: DemoPrepLoop): string {
 }
 
 /**
+ * Builds the .pptx deck from the same structured deck plan via the
+ * deterministic PPTX builder, base64-encoded so it can travel in the JSON
+ * card payload to the browser.
+ */
+function demoPrepLoopDeckPptxBase64(x: DemoPrepLoop): string {
+  return Buffer.from(
+    buildPptxDeck({ deckPlan: x.deckPlan, screenshotPlan: x.screenshotPlan }),
+  ).toString('base64');
+}
+
+/**
  * Extra labeled copy targets for the Demo Prep Loop: each plan section on its
  * own, the pitch as raw text, and the generated Markdown deck. The full plan is
  * offered via the primary `copyText`.
@@ -142,14 +153,14 @@ function makeCard<T>({
   render,
   copyText,
   copyActions,
-  downloadAction,
+  downloadActions,
 }: {
   id: string;
   artifact: T | undefined;
   render: (artifact: T) => string;
   copyText?: (artifact: T) => string;
   copyActions?: (artifact: T) => { label: string; text: string }[];
-  downloadAction?: (artifact: T) => { label: string; filename: string; text: string };
+  downloadActions?: (artifact: T) => NonNullable<WorkspaceCard['downloadActions']>;
 }): WorkspaceCard {
   const { label, group } = artifactMetaOf(id);
   if (artifact === undefined) {
@@ -162,8 +173,8 @@ function makeCard<T>({
   if (copyActions !== undefined) {
     card.copyActions = copyActions(artifact);
   }
-  if (downloadAction !== undefined) {
-    card.downloadAction = downloadAction(artifact);
+  if (downloadActions !== undefined) {
+    card.downloadActions = downloadActions(artifact);
   }
   return card;
 }
@@ -231,11 +242,20 @@ export function renderWorkspaceCards(result: AnalysisResult): WorkspaceCard[] {
       render: renderDemoPrepLoop,
       copyText: demoPrepLoopToMarkdown,
       copyActions: demoPrepLoopCopyActions,
-      downloadAction: (x) => ({
-        label: 'Download deck (.md)',
-        filename: 'demo-deck.md',
-        text: demoPrepLoopDeckMarkdown(x),
-      }),
+      downloadActions: (x) => [
+        {
+          label: 'Download deck (.md)',
+          filename: 'demo-deck.md',
+          mimeType: 'text/markdown',
+          text: demoPrepLoopDeckMarkdown(x),
+        },
+        {
+          label: 'Download PPTX deck',
+          filename: 'demo-deck.pptx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          base64: demoPrepLoopDeckPptxBase64(x),
+        },
+      ],
     }),
     makeCard({
       id: 'weeklyReview',

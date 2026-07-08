@@ -15,6 +15,7 @@ export interface DeckMetadata {
   projectName?: string;
 }
 
+/** Shared input for both deck builders (Markdown and PPTX). */
 export interface MarkdownDeckInput {
   /** The structured deck plan from the demoPrepLoop artifact. */
   deckPlan: readonly DeckSlide[];
@@ -28,6 +29,12 @@ export interface MarkdownDeckResult {
   slideCount: number;
 }
 
+export interface PptxDeckResult {
+  /** The .pptx file bytes (a ZIP of OOXML parts). */
+  bytes: Uint8Array;
+  slideCount: number;
+}
+
 /**
  * Builds a Markdown deck from a deck plan. Implementations must not reason
  * about, reorder, summarize, or rewrite the slides — formatting only.
@@ -35,4 +42,13 @@ export interface MarkdownDeckResult {
 export interface PresentationDeckBuilderTool {
   readonly name: string;
   execute(input: MarkdownDeckInput): Promise<MarkdownDeckResult>;
+}
+
+/**
+ * Builds a .pptx deck from a deck plan. Same rule as the Markdown builder:
+ * deterministic formatting only, no LLM, no reasoning.
+ */
+export interface PptxDeckBuilderTool {
+  readonly name: string;
+  execute(input: MarkdownDeckInput): Promise<PptxDeckResult>;
 }
