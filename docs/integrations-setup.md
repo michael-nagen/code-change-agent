@@ -314,11 +314,24 @@ duplicate any business logic: it calls the same analysis workflow, the same
 `MemoryStore`, and the same artifact-generation paths the UI uses. It is
 **disabled** unless `TELEGRAM_BOT_TOKEN` is set.
 
-From Telegram you can read status/memory, run analysis, generate Daily Work
-Guidance / Technical Change Brief / Demo Prep / Weekly Review, explicitly save
-memory, and clear project memory. Generation produces **mock/demo** output unless
-the engine is in real mode (`UI_MODE=real` + `OPENAI_API_KEY`), exactly like the
-UI.
+From Telegram you can read status/memory, list projects, run analysis, generate
+Daily Work Guidance / Technical Change Brief / Demo Prep / Weekly Review, re-show
+the last artifact, explicitly save memory, and clear project memory. Generation
+produces **mock/demo** output unless the engine is in real mode (`UI_MODE=real` +
+`OPENAI_API_KEY`), exactly like the UI.
+
+**Native Telegram UX** — the bot uses inline keyboards for contextual actions
+(e.g. after an analysis it offers **Daily / Technical / Demo / Weekly** buttons;
+after `/daily` a **Save** button; `/clear` shows **Confirm / Cancel**), a reply
+keyboard quick-menu after `/start`, progress messages that edit in place
+("🔄 Running analysis…" → the result), long replies split across messages, and
+button taps that reuse the exact same dispatch path as typed commands.
+
+**Natural language** — you don't have to use slash commands. Send a plain message
+like "what's blocking checkout?" or "run the daily prep" and it is routed to the
+right command. Routing uses an LLM intent classifier in real mode (the
+`work-request-intent` skill) and a deterministic keyword fallback otherwise; the
+message is always treated as untrusted data, never instructions.
 
 ### Full Telegram workflow
 
@@ -392,14 +405,17 @@ project data.
 
 | Command | What it does |
 |---------|--------------|
-| `/start` | Explains the bot, the default project, the engine mode, and lists commands. |
+| `/start` | Explains the bot, the default project, the engine mode, lists commands, shows the quick-menu keyboard. |
 | `/help` | Lists commands with short examples. |
 | `/status [project]` | Latest summary, checklist statuses, blockers, next actions. |
+| `/summary [project]` | Short high-level summary (progress counts + first next action). |
+| `/projects` | List projects that have saved memory (tap one to open its status). |
+| `/project [name]` | Show or set the active project for this chat. |
+| `/latest` | Re-show the last generated artifact in this chat (no recompute). |
 | `/memory [project]` | Compact snapshot (summary + counts). |
 | `/next` | Next actions only. |
 | `/blockers` | Open blockers/risks only. |
 | `/preferences` | Your saved prompt/working preferences (read-only). |
-| `/project [name]` | Show or set the active project for this chat. |
 | `/analyze [project] [spec: … diff: …]` | Run/reuse the analysis. |
 | `/daily` | Generate Daily Work Guidance. |
 | `/technical` | Generate the Technical Change Brief. |
@@ -409,8 +425,13 @@ project data.
 | `/notion daily\|weekly\|demo\|memory` | Send the latest matching artifact (or saved memory snapshot) to the configured Notion page. Explicit only. |
 | `/clear [confirm]` | Clear project memory (confirmation required). |
 
+Plus **plain-language messages** (no slash) are routed to the closest command.
+
 Project resolution: an explicit `[project]` wins, then the chat's active project
 (`/project <name>`), then `TELEGRAM_DEFAULT_PROJECT`.
+
+`/projects` requires a memory store that supports listing (the file, in-memory,
+and DB stores all do). Custom stores without listing report that clearly.
 
 **Per-chat state** — the bot keeps lightweight, in-memory control state per
 allowed chat (active project, last analysis session for on-demand generation,
@@ -430,8 +451,9 @@ by themselves. Missing artifact or missing Notion config returns a clear message
 on success the bot replies `Sent to Notion.`
 
 **What Telegram deliberately does NOT do (yet)** — no scheduling or background
-monitoring, no inline-keyboard UI, no file uploads, no binary deck sending, no
-GitHub write actions, and no multi-user auth beyond the allowed chat ids.
+monitoring, no file uploads, no binary deck sending, no in-chat structured memory
+editing (read + save/clear only; rich edits stay in the UI), no GitHub write
+actions, and no multi-user auth beyond the allowed chat ids.
 
 **Troubleshooting**
 

@@ -16,7 +16,7 @@
  * It is intentionally storage-agnostic behind `MemoryStore`: swapping this for a
  * Postgres/Mongo/Supabase/Redis/Notion store requires no caller changes.
  */
-import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { MemoryStoreError } from '../errors/MemoryStoreError.js';
@@ -24,6 +24,7 @@ import type {
   ClearProjectMemoryInput,
   GetProjectMemoryInput,
   GetUserMemoryInput,
+  ListProjectIdsInput,
   MemoryStore,
   SaveProjectMemoryInput,
   SaveUserMemoryInput,
@@ -76,6 +77,21 @@ export class JsonFileMemoryStore implements MemoryStore {
         throw new MemoryStoreError('IO', `Failed to clear project memory: ${describe(err)}`);
       }
     }
+  }
+
+  async listProjectIds({ userId }: ListProjectIdsInput): Promise<string[]> {
+    const dir = join(this.dataDir, 'projects', safeSegment(userId));
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch (err) {
+      if (isNotFound(err)) return [];
+      throw new MemoryStoreError('IO', `Failed to list projects: ${describe(err)}`);
+    }
+    return entries
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => name.slice(0, -'.json'.length))
+      .sort((a, b) => a.localeCompare(b));
   }
 
   private userPath(userId: string): string {

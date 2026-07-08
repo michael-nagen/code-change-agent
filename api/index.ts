@@ -18,9 +18,11 @@ import {
   resolveTelegramConfig,
   createTelegramWebhookHandler,
   DefaultTelegramWorkflowBridge,
+  DefaultIntentRouter,
   type TelegramWebhookHandler,
   type TelegramSourceDefaults,
 } from '../src/telegram/index.js';
+import { DefaultWorkRequestIntentSkill } from '../src/skills/workRequestIntent/index.js';
 
 // One shared store for both the runner (memory read on a run) and the memory
 // handlers (save/clear/edit/status). Note: on serverless the default file store
@@ -58,8 +60,18 @@ function resolveTelegram(): TelegramWebhookHandler | undefined {
     memoryStore,
     defaults: telegramSourceDefaults(),
     notionWriteBack: engine.notionWriteBack,
+    artifactTextEditSkill: engine.artifactTextEditSkill,
   });
-  return createTelegramWebhookHandler({ config: resolved.config, memoryStore, bridge });
+  const intentRouter =
+    engine.languageModel !== undefined
+      ? new DefaultIntentRouter(new DefaultWorkRequestIntentSkill(engine.languageModel))
+      : undefined;
+  return createTelegramWebhookHandler({
+    config: resolved.config,
+    memoryStore,
+    bridge,
+    ...(intentRouter !== undefined ? { intentRouter } : {}),
+  });
 }
 
 const telegram = resolveTelegram();

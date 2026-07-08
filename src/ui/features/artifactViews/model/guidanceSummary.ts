@@ -9,16 +9,16 @@ import type { DailyWorkGuidance } from '../../../../skills/dailyWorkGuidance/ind
 import type { GuidanceOverview } from '../../../types.js';
 
 export function summarizeGuidance(guidance: DailyWorkGuidance): GuidanceOverview {
-  const pendingSteps = guidance.plannedSteps.filter((s) => s.status === 'pending_approval');
-  const pendingDecisions = guidance.decisionsNeedingApproval.filter(
+  const pendingSteps = (guidance.plannedSteps ?? []).filter((s) => s.status === 'pending_approval');
+  const pendingDecisions = (guidance.decisionsNeedingApproval ?? []).filter(
     (d) => d.status === 'pending_approval',
   );
   const firstPending = pendingSteps[0];
   return {
-    loopStage: guidance.loopStatus.currentStage,
-    overallStatus: guidance.loopStatus.overallStatus,
+    loopStage: guidance.loopStatus?.currentStage ?? 'checkpoint',
+    overallStatus: guidance.loopStatus?.overallStatus ?? 'n/a',
     pendingApprovals: pendingSteps.length + pendingDecisions.length,
-    blockers: guidance.blockersAndRisks.length,
+    blockers: (guidance.blockersAndRisks ?? []).length,
     ...(guidance.selfCritique !== undefined
       ? {
           selfCritique: {

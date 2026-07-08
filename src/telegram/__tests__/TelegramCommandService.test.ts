@@ -18,6 +18,18 @@ import type { SaveMemoryResponse, ClearMemoryResponse } from '../../ui/types.js'
 const CHAT = 1;
 const CONFIG: TelegramConfig = { botToken: 'unit-token', allowedChatIds: ['1'], defaultProject: 'demo' };
 
+/** Run a slash command line through the service and join the reply text. */
+async function run(
+  svc: TelegramCommandService,
+  command: string,
+  argsText = '',
+  chatId: number | string = CHAT,
+): Promise<string> {
+  const line = argsText === '' ? `/${command}` : `/${command} ${argsText}`;
+  const reply = await svc.handleMessage({ text: line, chatId });
+  return reply.messages.map((m) => m.text).join('\n');
+}
+
 function realBridge(memoryStore: MemoryStore): DefaultTelegramWorkflowBridge {
   return new DefaultTelegramWorkflowBridge({
     runner: new MockAnalysisRunner(),
@@ -72,15 +84,15 @@ class SpyBridge implements TelegramWorkflowBridge {
 
 test('project resolution falls back to the configured default for /status', async () => {
   const { svc } = service();
-  const reply = await svc.run({ command: 'status', argsText: '', chatId: CHAT });
+  const reply = await run(svc, 'status', '');
   assert.match(reply, /Project: demo/);
 });
 
 test('/project sets and reports the active project for the chat', async () => {
   const { svc } = service();
-  const set = await svc.run({ command: 'project', argsText: 'My Other Project', chatId: CHAT });
+  const set = await run(svc, 'project', 'My Other Project');
   assert.match(set, /Active project set to: My Other Project/);
-  const shown = await svc.run({ command: 'project', argsText: '', chatId: CHAT });
+  const shown = await run(svc, 'project', '');
   assert.match(shown, /My Other Project/);
 });
 
@@ -88,7 +100,7 @@ test('/daily, /technical, /demo, /weekly each call the workflow bridge with the 
   const bridge = new SpyBridge();
   const { svc } = service({ bridge });
   for (const artifact of ['daily', 'technical', 'demo', 'weekly'] as const) {
-    await svc.run({ command: artifact, argsText: 'spec: s diff: +d', chatId: CHAT });
+    await run(svc, artifact, 'spec: s diff: +d');
   }
   assert.deepEqual(
     bridge.generateCalls.map((c) => c.artifact),
@@ -99,43 +111,39 @@ test('/daily, /technical, /demo, /weekly each call the workflow bridge with the 
 test('/analyze with no input and no configured sources returns a helpful missing-input error', async () => {
   const memoryStore = new InMemoryMemoryStore();
   const { svc } = service({ memoryStore, bridge: realBridge(memoryStore) });
-  const reply = await svc.run({ command: 'analyze', argsText: '', chatId: CHAT });
+  const reply = await run(svc, 'analyze', '');
   assert.match(reply, /code diff/i);
   assert.match(reply, /\/analyze spec:/);
 });
 
 test('generation commands report unavailability when no bridge is wired', async () => {
   const { svc } = service();
-  const reply = await svc.run({ command: 'daily', argsText: '', chatId: CHAT });
+  const reply = await run(svc, 'daily', '');
   assert.match(reply, /not configured/i);
 });
 
 test('/analyze then /daily generates a Daily Work Guidance via the real workflow (mock engine)', async () => {
   const memoryStore = new InMemoryMemoryStore();
   const { svc } = service({ memoryStore, bridge: realBridge(memoryStore) });
-  const analyze = await svc.run({
-    command: 'analyze',
-    argsText: 'spec: build it diff: +line',
-    chatId: CHAT,
-  });
+  const analyze = await run(svc, 'analyze', 'spec: build it diff: +line');
   assert.match(analyze, /Analysis ready/);
-  const daily = await svc.run({ command: 'daily', argsText: '', chatId: CHAT });
-  assert.match(daily, /Daily Work Guidance/);
+  const daily = await run(svc, 'daily', '');
+  assert.match(daily, /Daily Work Checkpoint/);
   assert.match(daily, /\/save daily/);
 });
 
 test('/save requires a pending memory update', async () => {
   const memoryStore = new InMemoryMemoryStore();
   const { svc } = service({ memoryStore, bridge: realBridge(memoryStore) });
-  const reply = await svc.run({ command: 'save', argsText: '', chatId: CHAT });
+  const reply = await run(svc, 'save', '');
   assert.match(reply, /No pending memory update/i);
 });
 
 test('/save persists the pending daily update to project memory', async () => {
   const memoryStore = new InMemoryMemoryStore();
   const { svc } = service({ memoryStore, bridge: realBridge(memoryStore) });
-  await svc.run({ command: 'daily', argsText: 'spec: build it diff: +line', chatId: CHAT });
-  const saved = await svc.run({ command: 'save', argsText: '', chatId: CHAT });
+  await run(svc, 'daily', 'spec: build it diff: +line');
+  const saved = await run(svc, 'save', '');
   assert.match(saved, /Saved progress/i);
   const memory = await memoryStore.getProjectMemory({ userId: 'local', projectId: 'demo' });
   assert.notEqual(memory?.latestSnapshot, undefined);
@@ -144,7 +152,7 @@ test('/save persists the pending daily update to project memory', async () => {
 test('/clear requires confirmation before clearing', async () => {
   const bridge = new SpyBridge();
   const { svc } = service({ bridge });
-  const first = await svc.run({ command: 'clear', argsText: '', chatId: CHAT });
+  const first = await run(svc, 'clear', '');
   assert.match(first, /clear confirm/i);
   assert.equal(bridge.clearCalls.length, 0);
 });
@@ -182,8 +190,8 @@ test('/clear confirm clears ONLY project memory, leaving user preferences intact
   });
 
   const { svc } = service({ memoryStore, bridge: realBridge(memoryStore) });
-  await svc.run({ command: 'clear', argsText: '', chatId: CHAT });
-  const done = await svc.run({ command: 'clear', argsText: 'confirm', chatId: CHAT });
+  await run(svc, 'clear', '');
+  const done = await run(svc, 'clear', 'confirm');
   assert.match(done, /Cleared project memory/i);
 
   assert.equal(await memoryStore.getProjectMemory({ userId: 'local', projectId: 'demo' }), undefined);
@@ -191,14 +199,86 @@ test('/clear confirm clears ONLY project memory, leaving user preferences intact
   assert.deepEqual(userMemory?.promptPreferences, { cursor: ['small diffs'] });
 });
 
+test('/projects lists saved projects for the user', async () => {
+  const memoryStore = new InMemoryMemoryStore();
+  for (const projectId of ['alpha', 'demo']) {
+    await memoryStore.saveProjectMemory({
+      userId: 'local',
+      projectId,
+      memory: {
+        schemaVersion: MEMORY_SCHEMA_VERSION,
+        userId: 'local',
+        projectId,
+        history: [],
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  }
+  const { svc } = service({ memoryStore });
+  const reply = await run(svc, 'projects');
+  assert.match(reply, /alpha/);
+  assert.match(reply, /demo/);
+});
+
+test('/summary gives a compact high-level view of the active project', async () => {
+  const memoryStore = new InMemoryMemoryStore();
+  await memoryStore.saveProjectMemory({
+    userId: 'local',
+    projectId: 'demo',
+    memory: {
+      schemaVersion: MEMORY_SCHEMA_VERSION,
+      userId: 'local',
+      projectId: 'demo',
+      latestSnapshot: {
+        date: '2026-07-07',
+        dailySummary: 'Shipped the adapter.',
+        updatedChecklistStatuses: [{ item: 'adapter', status: 'done' }],
+        openBlockers: [],
+        openDecisions: [],
+        nextActions: ['write docs'],
+      },
+      history: [],
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  const { svc } = service({ memoryStore });
+  const reply = await run(svc, 'summary');
+  assert.match(reply, /summary/i);
+  assert.match(reply, /1\/1 checklist items done/);
+  assert.match(reply, /write docs/);
+});
+
+test('/latest before any generation explains there is nothing yet', async () => {
+  const { svc } = service();
+  assert.match(await run(svc, 'latest'), /No generated artifact/i);
+});
+
+test('handleCallback dispatches the callback data as a command', async () => {
+  const { svc } = service();
+  const reply = await svc.handleCallback({ data: '/status', chatId: CHAT });
+  assert.match(reply.messages.map((m) => m.text).join('\n'), /Project: demo/);
+});
+
+test('a free-text message is routed to a command via the heuristic router', async () => {
+  const { svc } = service();
+  const reply = await svc.handleMessage({ text: 'what is the status of my project?', chatId: CHAT });
+  assert.match(reply.messages.map((m) => m.text).join('\n'), /Project: demo/);
+});
+
+test('an unrecognizable free-text message falls back to a friendly help reply', async () => {
+  const { svc } = service();
+  const reply = await svc.handleMessage({ text: 'zzz qqq nonsense', chatId: CHAT });
+  assert.match(reply.messages.map((m) => m.text).join('\n'), /didn't quite get that/i);
+});
+
 test('no reply ever contains the bot token', async () => {
   const memoryStore = new InMemoryMemoryStore();
   const { svc } = service({ memoryStore, bridge: realBridge(memoryStore) });
   const replies = [
-    await svc.run({ command: 'start', argsText: '', chatId: CHAT }),
-    await svc.run({ command: 'help', argsText: '', chatId: CHAT }),
-    await svc.run({ command: 'status', argsText: '', chatId: CHAT }),
-    await svc.run({ command: 'analyze', argsText: 'spec: s diff: +d', chatId: CHAT }),
+    await run(svc, 'start', ''),
+    await run(svc, 'help', ''),
+    await run(svc, 'status', ''),
+    await run(svc, 'analyze', 'spec: s diff: +d'),
   ];
   for (const reply of replies) {
     assert.ok(!reply.includes(CONFIG.botToken));

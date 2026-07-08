@@ -181,6 +181,14 @@ export type {
   EditableArtifact,
 } from './skills/artifactEdit/index.js';
 
+export { DefaultArtifactTextEditSkill } from './skills/artifactTextEdit/index.js';
+export { MockArtifactTextEditSkill } from './skills/mocks/index.js';
+export type {
+  ArtifactTextEditInput,
+  ArtifactTextEditResult,
+  ArtifactTextEditSkill,
+} from './skills/artifactTextEdit/index.js';
+
 export {
   AnalysisHarness,
   InMemoryArtifactStore,

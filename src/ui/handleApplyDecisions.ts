@@ -161,7 +161,10 @@ async function applyDecisions({
     return { status: 'error', message: persisted.error };
   }
 
-  const { currentStage, overallStatus } = refined.guidance.loopStatus;
+  const { currentStage, overallStatus } = refined.guidance.loopStatus ?? {
+    currentStage: 'checkpoint',
+    overallStatus: 'n/a',
+  };
   const suffix =
     persisted.memory !== undefined
       ? ` Saved to project memory for the next run.`

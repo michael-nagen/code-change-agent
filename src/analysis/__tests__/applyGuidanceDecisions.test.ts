@@ -21,6 +21,10 @@ function step(id: string, title: string): PlannedStep {
 
 function guidance(): DailyWorkGuidance {
   return {
+    headline: 'Planning built; PR, eviction, and docs are queued.',
+    whatChanged: ['Built the planning stage.'],
+    nextActions: ['Open the PR', 'Add eviction', 'Write docs'],
+    blockersOrDecisions: ['Decide on persistence: JSON file vs SQLite.'],
     loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
     yesterdaySummary: 'Built planning.',
     progressVsSpec: [],
@@ -62,8 +66,8 @@ test('approving a pending step changes its status to approved', () => {
     decidedAt: DECIDED_AT,
   });
 
-  assert.equal(updated.plannedSteps[0]?.status, 'approved');
-  assert.equal(updated.plannedSteps[1]?.status, 'pending_approval');
+  assert.equal(updated.plannedSteps![0]?.status, 'approved');
+  assert.equal(updated.plannedSteps![1]?.status, 'pending_approval');
 });
 
 test('editing a step updates its text, marks it edited, and keeps the note', () => {
@@ -75,7 +79,7 @@ test('editing a step updates its text, marks it edited, and keeps the note', () 
     decidedAt: DECIDED_AT,
   });
 
-  const edited = updated.plannedSteps[1];
+  const edited = updated.plannedSteps![1];
   assert.equal(edited?.status, 'edited');
   assert.equal(edited?.title, 'Add LRU eviction with tests');
   assert.equal(edited?.note, 'Scope it tighter');
@@ -91,11 +95,11 @@ test('rejecting a step removes it from the active plan but keeps it visible as r
     decidedAt: DECIDED_AT,
   });
 
-  const rejected = updated.plannedSteps[2];
+  const rejected = updated.plannedSteps![2];
   assert.equal(rejected?.status, 'rejected');
   assert.equal(rejected?.note, 'Docs can wait');
   // Still present in the artifact, but out of the active plan.
-  assert.equal(updated.plannedSteps.length, 3);
+  assert.equal(updated.plannedSteps!.length, 3);
   assert.deepEqual(updated.memoryUpdate.nextActions, ['Open the PR']);
   assert.equal(updated.notionDailyUpdate.today.includes('Write docs'), false);
 });
@@ -107,14 +111,14 @@ test('deferred items remain visible as deferred', () => {
     decidedAt: DECIDED_AT,
   });
 
-  assert.equal(updated.plannedSteps[2]?.status, 'deferred');
-  assert.equal(updated.plannedSteps.length, 3);
+  assert.equal(updated.plannedSteps![2]?.status, 'deferred');
+  assert.equal(updated.plannedSteps!.length, 3);
 });
 
 test('deciding every pending item advances the loop stage (planning → approved_plan)', () => {
   const before = guidance();
-  assert.equal(before.loopStatus.currentStage, 'planning');
-  assert.equal(before.loopStatus.overallStatus, 'pending_user_review');
+  assert.equal(before.loopStatus!.currentStage, 'planning');
+  assert.equal(before.loopStatus!.overallStatus, 'pending_user_review');
 
   const { guidance: updated } = applyGuidanceDecisions({
     guidance: before,
@@ -127,9 +131,9 @@ test('deciding every pending item advances the loop stage (planning → approved
     decidedAt: DECIDED_AT,
   });
 
-  assert.equal(updated.loopStatus.currentStage, 'approved_plan');
-  assert.equal(updated.loopStatus.overallStatus, 'approved');
-  assert.equal(updated.loopStatus.decidedAt, DECIDED_AT);
+  assert.equal(updated.loopStatus!.currentStage, 'approved_plan');
+  assert.equal(updated.loopStatus!.overallStatus, 'approved');
+  assert.equal(updated.loopStatus!.decidedAt, DECIDED_AT);
 });
 
 test('the stage stays planning while any item is still pending', () => {
@@ -140,9 +144,9 @@ test('the stage stays planning while any item is still pending', () => {
   });
 
   // step-2, step-3 and the open decision are still pending.
-  assert.equal(updated.loopStatus.currentStage, 'planning');
-  assert.equal(updated.loopStatus.overallStatus, 'pending_user_review');
-  assert.equal(updated.loopStatus.decidedAt, DECIDED_AT);
+  assert.equal(updated.loopStatus!.currentStage, 'planning');
+  assert.equal(updated.loopStatus!.overallStatus, 'pending_user_review');
+  assert.equal(updated.loopStatus!.decidedAt, DECIDED_AT);
 });
 
 test('deferring counts as a decision — it does not block the stage advance', () => {
@@ -157,7 +161,7 @@ test('deferring counts as a decision — it does not block the stage advance', (
     decidedAt: DECIDED_AT,
   });
 
-  assert.equal(updated.loopStatus.currentStage, 'approved_plan');
+  assert.equal(updated.loopStatus!.currentStage, 'approved_plan');
 });
 
 test('the memory update reflects the decisions', () => {
@@ -204,8 +208,8 @@ test('resolving the open decision clears it from decisionsNeeded', () => {
     decidedAt: DECIDED_AT,
   });
 
-  assert.equal(updated.decisionsNeedingApproval[0]?.status, 'approved');
-  assert.equal(updated.decisionsNeedingApproval[0]?.note, 'JSON file it is');
+  assert.equal(updated.decisionsNeedingApproval![0]?.status, 'approved');
+  assert.equal(updated.decisionsNeedingApproval![0]?.note, 'JSON file it is');
   assert.equal(updated.notionDailyUpdate.decisionsNeeded, 'None — all surfaced decisions are resolved.');
 });
 

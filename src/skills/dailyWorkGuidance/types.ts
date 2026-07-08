@@ -241,30 +241,50 @@ export interface GuidanceSelfCritique {
   checkedAt: string;
 }
 
+/**
+ * Daily Work Guidance is a SHORT WORK CHECKPOINT, not a full report:
+ *  - `headline`           — one line: where the work stands today.
+ *  - `whatChanged`        — one sentence per topic (what we did).
+ *  - `nextActions`        — one sentence per action (what to do next).
+ *  - `blockersOrDecisions`— only the important blockers/decisions (may be empty).
+ *
+ * `notionDailyUpdate` and `memoryUpdate` are retained as the structured sources
+ * for the two footer actions (Send to Notion / Save to memory); they are derived
+ * from the checkpoint content, not a second report to read.
+ *
+ * The remaining approval-loop fields are DORMANT: the checkpoint no longer
+ * generates or renders them, but they stay optional so the (now unused)
+ * approval-loop code keeps compiling until it is removed in a follow-up.
+ */
 export interface DailyWorkGuidance {
-  /**
-   * The approval loop's state. Starts at planning / pending_user_review and
-   * advances only when the user's decisions are applied.
-   */
-  loopStatus: GuidanceLoopStatus;
-  /**
-   * Present when the bounded self-critique pass ran (at most once per
-   * generation). Optional and additive: artifacts without it stay valid.
-   */
-  selfCritique?: GuidanceSelfCritique;
-  /** What was done yesterday, drawn from the latest work analysis. */
-  yesterdaySummary: string;
-  /** Each spec/checklist item compared against yesterday's work. */
-  progressVsSpec: ProgressItem[];
-  /** The items that explicitly moved forward yesterday. */
-  advancedChecklistItems: AdvancedChecklistItem[];
-  /** Top-level blockers and risks, not buried inside the memory update. */
-  blockersAndRisks: BlockerOrRisk[];
-  /** Decisions the developer must approve before the plan is final. */
-  decisionsNeedingApproval: DecisionNeedingApproval[];
-  /** Today's recommended steps — each open for approval/discussion. */
-  plannedSteps: PlannedStep[];
-  /** A fixed-format, copyable Notion-ready daily update. */
+  /** One line: where the work stands today. */
+  headline: string;
+  /** What we did — one sentence per topic. No trivial items. */
+  whatChanged: string[];
+  /** What to do next — one sentence per action. */
+  nextActions: string[];
+  /** Only the important blockers or decisions; empty when there are none. */
+  blockersOrDecisions: string[];
+  /** A fixed-format, copyable Notion-ready daily update (footer: Send to Notion). */
   notionDailyUpdate: NotionDailyUpdate;
+  /** The savable memory snapshot (footer: Save to memory). */
   memoryUpdate: MemoryUpdate;
+
+  // --- Dormant approval-loop fields (no longer generated or shown) ---
+  /** @deprecated Dormant approval-loop state. */
+  loopStatus?: GuidanceLoopStatus;
+  /** @deprecated Dormant self-critique pass output. */
+  selfCritique?: GuidanceSelfCritique;
+  /** @deprecated Superseded by `headline`. */
+  yesterdaySummary?: string;
+  /** @deprecated Superseded by `whatChanged`. */
+  progressVsSpec?: ProgressItem[];
+  /** @deprecated Superseded by `whatChanged`. */
+  advancedChecklistItems?: AdvancedChecklistItem[];
+  /** @deprecated Superseded by `blockersOrDecisions`. */
+  blockersAndRisks?: BlockerOrRisk[];
+  /** @deprecated Superseded by `blockersOrDecisions`. */
+  decisionsNeedingApproval?: DecisionNeedingApproval[];
+  /** @deprecated Superseded by `nextActions`. */
+  plannedSteps?: PlannedStep[];
 }

@@ -7,7 +7,33 @@ export {
   parseSaveSource,
 } from './parseTelegramCommand.js';
 export type { InlineAnalyzeInput } from './parseTelegramCommand.js';
-export { formatProjectStatus, formatMemorySnapshot } from './formatStatus.js';
+export {
+  formatProjectStatus,
+  formatMemorySnapshot,
+  formatProjectsList,
+  formatProjectSummary,
+} from './formatStatus.js';
+export {
+  plainReply,
+  htmlReply,
+  splitText,
+  escapeHtml,
+  bold,
+  TELEGRAM_SPLIT_LIMIT,
+} from './reply.js';
+export {
+  mainMenuKeyboard,
+  generationKeyboard,
+  saveKeyboard,
+  clearConfirmKeyboard,
+  projectsKeyboard,
+  editResultKeyboard,
+} from './keyboards.js';
+export { InMemoryTelegramArtifactRegistry } from './TelegramArtifactRegistry.js';
+export { DefaultIntentRouter } from './IntentRouter.js';
+export type { IntentRouter, RoutedCommand } from './IntentRouter.js';
+export { dispatchCommand, isKnownCommand } from './handlers/index.js';
+export type { CommandSpec, HandlerContext } from './handlers/index.js';
 export {
   formatHelp,
   formatStart,
@@ -28,6 +54,8 @@ export type {
   TelegramWorkflowBridge,
   TelegramGenerationRequest,
   TelegramGenerationResult,
+  TelegramEditRequest,
+  TelegramEditResult,
   TelegramSourceDefaults,
 } from './TelegramWorkflowBridge.js';
 export { HttpTelegramApi } from './HttpTelegramApi.js';
@@ -40,9 +68,23 @@ export type {
   ResolvedTelegramConfig,
   TelegramUpdate,
   TelegramMessage,
+  TelegramCallbackQuery,
   ParsedCommand,
   ParsedTelegramCommand,
   TelegramApi,
+  SendMessageInput,
+  EditMessageTextInput,
+  AnswerCallbackQueryInput,
+  TelegramParseMode,
+  InlineKeyboardButton,
+  InlineKeyboardMarkup,
+  ReplyKeyboardMarkup,
+  RemoveReplyKeyboard,
+  TelegramReplyMarkup,
+  OutgoingMessage,
+  TelegramReply,
+  TelegramArtifactRef,
+  TelegramArtifactRegistry,
   TelegramWebhookResult,
   TelegramArtifactKind,
   TelegramSaveSource,

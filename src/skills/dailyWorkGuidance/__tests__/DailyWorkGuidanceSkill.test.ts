@@ -68,63 +68,18 @@ const FLOW_ARTIFACT: FlowArtifact = {
 };
 
 const VALID_GUIDANCE: DailyWorkGuidance = {
-  loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
-  yesterdaySummary: 'Implemented the planning stage before execution.',
-  progressVsSpec: [
-    {
-      item: 'Add a planning stage before execution',
-      previousStatus: 'missing',
-      whatChanged: 'The planning stage was implemented.',
-      newStatus: 'done',
-      evidence: 'RequirementAlignment lists the planning stage as satisfied.',
-      confidence: 'high',
-    },
-    {
-      item: 'Persist plans to disk',
-      whatChanged: 'Persistence was started but not finished.',
-      newStatus: 'partial',
-      evidence: 'GapReport lists plan persistence as started.',
-      confidence: 'medium',
-    },
+  headline: 'Planning stage landed; persistence and the CLI flag are next.',
+  whatChanged: [
+    'Implemented the planning stage before execution.',
+    'Started plan persistence but did not finish it.',
   ],
-  advancedChecklistItems: [
-    {
-      item: 'Add a planning stage before execution',
-      previousStatus: 'missing',
-      newStatus: 'done',
-      whatAdvanced: 'The planning stage went from missing to implemented.',
-      evidence: 'ChangeExplanation describes the new planning stage.',
-    },
+  nextActions: [
+    'Persist plans to disk so they survive a restart.',
+    'Add the CLI flag to skip planning.',
   ],
-  blockersAndRisks: [
-    {
-      title: 'Plans lost on restart',
-      description: 'Plans are not persisted.',
-      whyItMatters: 'Work is lost between runs.',
-      requiredAction: 'Implement disk persistence.',
-      severity: 'high',
-    },
-  ],
-  decisionsNeedingApproval: [
-    {
-      decision: 'Where to store persisted plans.',
-      context: 'Persistence is not yet implemented.',
-      options: ['Local JSON file', 'SQLite'],
-      recommendedOption: 'Local JSON file',
-      status: 'pending_approval',
-    },
-  ],
-  plannedSteps: [
-    {
-      id: 'step-1',
-      title: 'Persist plans to disk',
-      whyItMatters: 'Removes the highest-risk gap.',
-      expectedOutput: 'Plans survive a restart.',
-      cursorPrompt: 'Add disk persistence for plans in the Planner component.',
-      validationChecklist: ['Plans survive a restart.'],
-      relatedSpecItems: ['Persist plans to disk'],
-      status: 'pending_approval',
-    },
+  blockersOrDecisions: [
+    'Plans are lost on restart until persistence lands.',
+    'Decide where to store persisted plans (local JSON vs SQLite).',
   ],
   notionDailyUpdate: {
     yesterday: 'Built the planning stage.',
@@ -219,28 +174,26 @@ test('the prompt does not include a raw diff', async () => {
   assert.equal('rawDiff' in input(), false);
 });
 
-test('omits an unknown previousStatus in progressVsSpec', async () => {
+test('keeps the checkpoint lean: one sentence per topic/action', async () => {
   const model = new FakeLanguageModel(JSON.stringify(VALID_GUIDANCE));
   const skill = new DefaultDailyWorkGuidanceSkill(model);
 
   const guidance = await skill.execute(input());
 
-  assert.equal('previousStatus' in guidance.progressVsSpec[1]!, false);
-  assert.equal(guidance.progressVsSpec[0]!.previousStatus, 'missing');
+  assert.equal(guidance.headline, VALID_GUIDANCE.headline);
+  assert.deepEqual(guidance.whatChanged, VALID_GUIDANCE.whatChanged);
+  assert.deepEqual(guidance.nextActions, VALID_GUIDANCE.nextActions);
+  assert.deepEqual(guidance.blockersOrDecisions, VALID_GUIDANCE.blockersOrDecisions);
 });
 
-test('every planned step and decision is pending approval', async () => {
-  const model = new FakeLanguageModel(JSON.stringify(VALID_GUIDANCE));
+test('tolerates a missing blockersOrDecisions as an empty list', async () => {
+  const { blockersOrDecisions: _b, ...rest } = VALID_GUIDANCE;
+  const model = new FakeLanguageModel(JSON.stringify(rest));
   const skill = new DefaultDailyWorkGuidanceSkill(model);
 
   const guidance = await skill.execute(input());
 
-  for (const step of guidance.plannedSteps) {
-    assert.equal(step.status, 'pending_approval');
-  }
-  for (const decision of guidance.decisionsNeedingApproval) {
-    assert.equal(decision.status, 'pending_approval');
-  }
+  assert.deepEqual(guidance.blockersOrDecisions, []);
 });
 
 test('fails closed on invalid JSON', async () => {
@@ -284,18 +237,13 @@ test('a prompt-injection spec is fenced as data, not obeyed as a control instruc
   assert.deepEqual(guidance, VALID_GUIDANCE);
 });
 
-test('fails closed on an invalid progress status', async () => {
+test('fails closed on an invalid checklist status in the memory update', async () => {
   const broken = {
     ...VALID_GUIDANCE,
-    progressVsSpec: [
-      {
-        item: 'Something',
-        whatChanged: 'x',
-        newStatus: 'in_progress',
-        evidence: 'n/a',
-        confidence: 'high',
-      },
-    ],
+    memoryUpdate: {
+      ...VALID_GUIDANCE.memoryUpdate,
+      updatedChecklistStatuses: [{ item: 'Something', status: 'in_progress' }],
+    },
   };
   const model = new FakeLanguageModel(JSON.stringify(broken));
   const skill = new DefaultDailyWorkGuidanceSkill(model);
@@ -306,11 +254,8 @@ test('fails closed on an invalid progress status', async () => {
   );
 });
 
-test('fails closed when a planned step is not pending_approval', async () => {
-  const broken = {
-    ...VALID_GUIDANCE,
-    plannedSteps: [{ ...VALID_GUIDANCE.plannedSteps[0], status: 'approved' }],
-  };
+test('fails closed when a required checkpoint field is missing', async () => {
+  const { headline: _h, ...broken } = VALID_GUIDANCE;
   const model = new FakeLanguageModel(JSON.stringify(broken));
   const skill = new DefaultDailyWorkGuidanceSkill(model);
 

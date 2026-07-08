@@ -23,6 +23,10 @@ function step(id: string, title: string): PlannedStep {
 
 function guidance(): DailyWorkGuidance {
   return {
+    headline: 'Planning built; next steps queued.',
+    whatChanged: ['Built the planning stage.'],
+    nextActions: ['Open the PR.'],
+    blockersOrDecisions: [],
     loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
     yesterdaySummary: 'Built planning.',
     progressVsSpec: [
@@ -109,9 +113,9 @@ test('a revision of a rejected step appends as pending approval; the rejection s
     decidedAt: DECIDED_AT,
   });
 
-  const ids = merged.plannedSteps.map((s) => `${s.id}:${s.status}`);
+  const ids = merged.plannedSteps!.map((s) => `${s.id}:${s.status}`);
   assert.deepEqual(ids, ['step-1:rejected', 'step-2:approved', 'step-r1:pending_approval']);
-  const revised = merged.plannedSteps[2];
+  const revised = merged.plannedSteps![2];
   assert.equal(revised?.title, 'Write the missing tests first');
   assert.equal(revised?.respondsTo, 'step-1');
 });
@@ -132,9 +136,9 @@ test('a revision of an edited step supersedes it in place, returning for approva
     decidedAt: DECIDED_AT,
   });
 
-  const ids = merged.plannedSteps.map((s) => `${s.id}:${s.status}`);
+  const ids = merged.plannedSteps!.map((s) => `${s.id}:${s.status}`);
   assert.deepEqual(ids, ['step-1:pending_approval', 'step-r1:pending_approval']);
-  assert.equal(merged.plannedSteps[1]?.respondsTo, 'step-2');
+  assert.equal(merged.plannedSteps![1]?.respondsTo, 'step-2');
 });
 
 test('factual sections are preserved from the decided guidance, never the model', () => {
@@ -183,7 +187,7 @@ test('the durable date and decision audit trail never regress', () => {
 
 test('the loop advances to the revised stage while revisions await approval', () => {
   const decided = decidedGuidance();
-  assert.equal(decided.loopStatus.currentStage, 'approved_plan');
+  assert.equal(decided.loopStatus!.currentStage, 'approved_plan');
 
   const merged = mergeGuidanceRefinement({
     decided,
@@ -191,9 +195,9 @@ test('the loop advances to the revised stage while revisions await approval', ()
     decidedAt: DECIDED_AT,
   });
 
-  assert.equal(merged.loopStatus.currentStage, 'revised_plan_pending_approval');
-  assert.equal(merged.loopStatus.overallStatus, 'pending_user_review');
-  assert.equal(merged.loopStatus.lastRevisionSummary, 'Swapped the PR step for a test-first step.');
+  assert.equal(merged.loopStatus!.currentStage, 'revised_plan_pending_approval');
+  assert.equal(merged.loopStatus!.overallStatus, 'pending_user_review');
+  assert.equal(merged.loopStatus!.lastRevisionSummary, 'Swapped the PR step for a test-first step.');
 });
 
 test('approving the revised step afterwards advances to approved_plan and keeps the summary', () => {
@@ -209,9 +213,9 @@ test('approving the revised step afterwards advances to approved_plan and keeps 
     decidedAt: '2026-07-07T13:00:00.000Z',
   }).guidance;
 
-  assert.equal(final.loopStatus.currentStage, 'approved_plan');
-  assert.equal(final.loopStatus.overallStatus, 'approved');
-  assert.equal(final.loopStatus.lastRevisionSummary, 'Swapped the PR step for a test-first step.');
+  assert.equal(final.loopStatus!.currentStage, 'approved_plan');
+  assert.equal(final.loopStatus!.overallStatus, 'approved');
+  assert.equal(final.loopStatus!.lastRevisionSummary, 'Swapped the PR step for a test-first step.');
   assert.deepEqual(final.memoryUpdate.nextActions, ['Write docs', 'Write the missing tests first']);
 });
 
@@ -252,7 +256,7 @@ test('revised ids never collide, even across refinement rounds', () => {
     decidedAt: DECIDED_AT,
   });
 
-  const ids = secondRound.plannedSteps.map((s) => s.id);
+  const ids = secondRound.plannedSteps!.map((s) => s.id);
   assert.deepEqual(new Set(ids).size, ids.length, `ids must be unique: ${ids.join(', ')}`);
   assert.ok(ids.includes('step-r2'));
 });

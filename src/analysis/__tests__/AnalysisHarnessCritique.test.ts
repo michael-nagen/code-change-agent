@@ -61,6 +61,10 @@ const GAP_REPORT: GapReport = {
 };
 
 const GUIDANCE: DailyWorkGuidance = {
+  headline: 'Planning built; next steps queued.',
+  whatChanged: ['Built the planning stage.'],
+  nextActions: ['Open the PR.'],
+  blockersOrDecisions: [],
   loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Built planning.',
   progressVsSpec: [],
@@ -195,8 +199,8 @@ test('the self-critique runs exactly once after generation and revises the shown
   const shown = result.dailyWorkGuidance;
   assert.ok(shown);
   // The user sees the revised, still-pending plan with the review attached.
-  assert.equal(shown.plannedSteps[0]?.title, 'Write planner tests');
-  assert.equal(shown.plannedSteps[0]?.status, 'pending_approval');
+  assert.equal(shown.plannedSteps![0]?.title, 'Write planner tests');
+  assert.equal(shown.plannedSteps![0]?.status, 'pending_approval');
   assert.equal(shown.selfCritique?.revisionApplied, true);
   // The factual sections come from the original generation.
   assert.equal(shown.yesterdaySummary, GUIDANCE.yesterdaySummary);

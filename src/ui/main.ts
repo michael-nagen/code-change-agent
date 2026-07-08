@@ -20,8 +20,23 @@ import {
   resolveTelegramConfig,
   createTelegramWebhookHandler,
   DefaultTelegramWorkflowBridge,
+  DefaultIntentRouter,
 } from '../telegram/index.js';
 import type { TelegramWebhookHandler, TelegramSourceDefaults } from '../telegram/index.js';
+import { DefaultWorkRequestIntentSkill } from '../skills/workRequestIntent/index.js';
+import type { ArtifactTextEditSkill } from '../skills/artifactTextEdit/index.js';
+import type { LanguageModel } from '../index.js';
+import {
+  JsonFileVideoStore,
+  MockYouTubeVideoSearch,
+  VideoLibraryService,
+  YouTubeApiVideoSearch,
+  runDailyVideoTick,
+  seedVideos,
+} from '../videos/index.js';
+import { HttpTelegramApi } from '../telegram/HttpTelegramApi.js';
+import type { TelegramConfig } from '../telegram/index.js';
+import { formatVideoMessage } from '../telegram/handlers/videoCommands.js';
 
 /** Configured default sources Telegram may fall back to (read straight from env). */
 function telegramSourceDefaults(): TelegramSourceDefaults {
@@ -40,16 +55,81 @@ function telegramSourceDefaults(): TelegramSourceDefaults {
  * the same engine without duplicating logic. Returns undefined (and the route
  * stays 404) when Telegram is not configured.
  */
+/**
+ * The durable video library used by the Telegram video commands and the daily
+ * send. Real YouTube discovery only when YOUTUBE_API_KEY is set; otherwise a
+ * clearly-labeled mock provider keeps /refresh_videos demonstrable.
+ */
+function resolveVideoLibrary(): VideoLibraryService {
+  const apiKey = process.env.YOUTUBE_API_KEY?.trim();
+  const search =
+    apiKey !== undefined && apiKey !== ''
+      ? new YouTubeApiVideoSearch({ apiKey })
+      : new MockYouTubeVideoSearch();
+  const library = new VideoLibraryService({ store: new JsonFileVideoStore(), search });
+  // First run only: bootstrap the empty on-disk library with the seed list.
+  void library.seedIfEmpty(seedVideos()).catch(() => undefined);
+  return library;
+}
+
+/**
+ * Opt-in daily video send (DAILY_VIDEO_ENABLED=true): a periodic tick that
+ * delivers at most one video per calendar day to the FIRST configured allowed
+ * chat id — never to anyone else. Failures are logged and not retried until
+ * the next day; ticks are cheap (a small JSON read) between sends.
+ */
+function maybeStartDailyVideoSend({
+  videoLibrary,
+  config,
+}: {
+  videoLibrary: VideoLibraryService;
+  config: TelegramConfig;
+}): void {
+  if (process.env.DAILY_VIDEO_ENABLED !== 'true') return;
+  const chatId = config.allowedChatIds[0];
+  if (chatId === undefined) {
+    // eslint-disable-next-line no-console
+    console.log('[videos] DAILY_VIDEO_ENABLED is set but TELEGRAM_ALLOWED_CHAT_IDS is empty — daily send disabled.');
+    return;
+  }
+  const sendTime = process.env.DAILY_VIDEO_TIME?.trim() || '09:00';
+  const api = new HttpTelegramApi({ botToken: config.botToken });
+  const tick = async (): Promise<void> => {
+    const outcome = await runDailyVideoTick({
+      videoLibrary,
+      deliver: async (video) => {
+        await api.sendMessage({ chatId, text: formatVideoMessage(video) });
+      },
+      now: new Date(),
+      sendTime,
+    });
+    if (outcome === 'sent' || outcome === 'failed' || outcome === 'empty') {
+      // eslint-disable-next-line no-console
+      console.log(`[videos] daily send: ${outcome}`);
+    }
+  };
+  const timer = setInterval(() => void tick().catch(() => undefined), 5 * 60 * 1000);
+  timer.unref();
+  // eslint-disable-next-line no-console
+  console.log(`[videos] daily video send enabled (after ${sendTime}, first allowed chat).`);
+}
+
 function resolveTelegram({
   memoryStore,
   runner,
   mode,
   notionWriteBack,
+  artifactTextEditSkill,
+  languageModel,
+  videoLibrary,
 }: {
   memoryStore: MemoryStore;
   runner: AnalysisRunner;
   mode: UiMode;
   notionWriteBack: NotionWriteBackService;
+  artifactTextEditSkill: ArtifactTextEditSkill;
+  languageModel?: LanguageModel;
+  videoLibrary: VideoLibraryService;
 }): TelegramWebhookHandler | undefined {
   const resolved = resolveTelegramConfig();
   for (const warning of resolved.warnings) {
@@ -65,17 +145,47 @@ function resolveTelegram({
     memoryStore,
     defaults: telegramSourceDefaults(),
     notionWriteBack,
+    artifactTextEditSkill,
   });
-  return createTelegramWebhookHandler({ config: resolved.config, memoryStore, bridge });
+  // Natural-language routing uses the LLM intent skill when a model is available
+  // (real mode); otherwise the service falls back to its keyword heuristic.
+  const intentRouter =
+    languageModel !== undefined
+      ? new DefaultIntentRouter(new DefaultWorkRequestIntentSkill(languageModel))
+      : undefined;
+  maybeStartDailyVideoSend({ videoLibrary, config: resolved.config });
+  return createTelegramWebhookHandler({
+    config: resolved.config,
+    memoryStore,
+    bridge,
+    videoLibrary,
+    ...(intentRouter !== undefined ? { intentRouter } : {}),
+  });
 }
 
 function main(): void {
   const port = Number(process.env.PORT ?? 5173);
   // Durable developer memory (JSON file store by default; see resolveMemoryStore).
   const memoryStore = resolveMemoryStore();
-  const { runner, mode, artifactEditSkill, guidanceRefinementSkill, notionWriteBack } =
-    resolveEngine(memoryStore);
-  const telegram = resolveTelegram({ memoryStore, runner, mode, notionWriteBack });
+  const {
+    runner,
+    mode,
+    artifactEditSkill,
+    artifactTextEditSkill,
+    guidanceRefinementSkill,
+    notionWriteBack,
+    languageModel,
+  } = resolveEngine(memoryStore);
+  const videoLibrary = resolveVideoLibrary();
+  const telegram = resolveTelegram({
+    memoryStore,
+    runner,
+    mode,
+    notionWriteBack,
+    artifactTextEditSkill,
+    videoLibrary,
+    ...(languageModel !== undefined ? { languageModel } : {}),
+  });
   const server = createUiServer({
     runner,
     mode,

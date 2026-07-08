@@ -56,11 +56,11 @@ export function applyGuidanceCritique({
   // fewer decisions than before would silently take choices away from the user.
   if (
     critique.revisedPlan?.decisionsNeedingApproval !== undefined &&
-    critique.revisedPlan.decisionsNeedingApproval.length < guidance.decisionsNeedingApproval.length
+    critique.revisedPlan.decisionsNeedingApproval.length < (guidance.decisionsNeedingApproval ?? []).length
   ) {
     throw new HarnessError(
       'VALIDATION',
-      `The critique tried to reduce the open decisions from ${guidance.decisionsNeedingApproval.length} to ${critique.revisedPlan.decisionsNeedingApproval.length} — revisions may reframe or add approval points, never remove them.`,
+      `The critique tried to reduce the open decisions from ${(guidance.decisionsNeedingApproval ?? []).length} to ${critique.revisedPlan.decisionsNeedingApproval.length} — revisions may reframe or add approval points, never remove them.`,
     );
   }
 
@@ -141,13 +141,18 @@ export async function runGuidanceSelfCritique({
   /** ISO timestamp stamped onto the critique record. */
   checkedAt: string;
 }): Promise<DailyWorkGuidance> {
+  // The lean checkpoint has no approvable planned steps; there is nothing to
+  // critique, so it passes through untouched (the critic is now dormant).
+  if ((guidance.plannedSteps ?? []).length === 0) {
+    return guidance;
+  }
   // The critique reviews a fresh proposal only. Anything already decided by
   // the user is out of its jurisdiction, so a decided plan passes through.
   if (!isPreDecision(guidance)) {
     return guidance;
   }
 
-  logEvent({ event: 'self_critique_started', fields: { stepCount: guidance.plannedSteps.length } });
+  logEvent({ event: 'self_critique_started', fields: { stepCount: (guidance.plannedSteps ?? []).length } });
   const stopCritiqueTimer = startTimer();
   try {
     // Exactly one critic call per generation — no retry, no iteration.
@@ -198,7 +203,7 @@ export async function runGuidanceSelfCritique({
 /** Whether every step and open decision still awaits the user's decision. */
 function isPreDecision(guidance: DailyWorkGuidance): boolean {
   return (
-    guidance.plannedSteps.every((step) => step.status === 'pending_approval') &&
-    guidance.decisionsNeedingApproval.every((entry) => entry.status === 'pending_approval')
+    (guidance.plannedSteps ?? []).every((step) => step.status === 'pending_approval') &&
+    (guidance.decisionsNeedingApproval ?? []).every((entry) => entry.status === 'pending_approval')
   );
 }

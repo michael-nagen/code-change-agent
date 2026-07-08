@@ -138,11 +138,14 @@ the wording of artifacts differs.
   and an output **token cap** (`OPENAI_MAX_TOKENS`); raw model output is never
   exposed in the product UI, and failures fail closed.
 - **Telegram (if enabled) is user-initiated only.** It responds to a user's
-  command in an allow-listed chat and acts as a thin command interface over the
-  **same** analysis workflow and `MemoryStore` the UI uses (no duplicated logic).
-  It never messages third parties autonomously, never auto-saves memory (`/save`
-  is explicit), requires `/clear confirm` to clear, validates the webhook secret,
-  and never logs the bot token. See
+  command (or plain-language message) in an allow-listed chat and acts as a thin
+  command interface over the **same** analysis workflow and `MemoryStore` the UI
+  uses (no duplicated logic) — with native Telegram UX (inline/reply keyboards,
+  progress edits, split messages). Natural-language routing treats every message
+  as untrusted data, never instructions. It never messages third parties
+  autonomously, never auto-saves memory (`/save` is explicit), requires
+  `/clear confirm` to clear, validates the webhook secret, and never logs the bot
+  token. See
   [`docs/integrations-setup.md`](docs/integrations-setup.md).
 
 ## Architecture summary

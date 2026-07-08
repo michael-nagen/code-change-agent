@@ -14,6 +14,10 @@ import type {
 } from '../../skills/dailyWorkGuidanceRefinement/index.js';
 
 const GUIDANCE: DailyWorkGuidance = {
+  headline: 'Planning built; next steps queued.',
+  whatChanged: ['Built the planning stage.'],
+  nextActions: ['Open the PR.'],
+  blockersOrDecisions: [],
   loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Built planning.',
   progressVsSpec: [],
@@ -108,14 +112,13 @@ test('applies decisions, updates the stored artifact, and advances the loop', as
   assert.deepEqual(response.loopStatus, { currentStage: 'approved_plan', overallStatus: 'approved' });
   // The session's stored artifact was updated, not just the response.
   const stored = store.getResult('sess-1');
-  assert.equal(stored?.dailyWorkGuidance?.plannedSteps[0]?.status, 'approved');
-  assert.equal(stored?.dailyWorkGuidance?.plannedSteps[1]?.status, 'edited');
-  assert.equal(stored?.dailyWorkGuidance?.plannedSteps[1]?.title, 'Write API docs only');
-  assert.equal(stored?.dailyWorkGuidance?.loopStatus.currentStage, 'approved_plan');
-  // The re-rendered card reflects the new statuses and stage.
-  assert.match(response.card.html, /Approved/);
-  assert.match(response.card.html, /Edited/);
-  assert.match(response.card.html, /approved_plan/);
+  assert.equal(stored?.dailyWorkGuidance?.plannedSteps![0]?.status, 'approved');
+  assert.equal(stored?.dailyWorkGuidance?.plannedSteps![1]?.status, 'edited');
+  assert.equal(stored?.dailyWorkGuidance?.plannedSteps![1]?.title, 'Write API docs only');
+  assert.equal(stored?.dailyWorkGuidance?.loopStatus!.currentStage, 'approved_plan');
+  // The card re-renders as the lean checkpoint; per-item statuses live on the
+  // stored artifact (asserted above), not in the card HTML.
+  assert.match(response.card.html, /Where things stand/);
 });
 
 test('persists the decided plan into project memory (decisions + loop stage)', async () => {
@@ -166,7 +169,7 @@ test('without a project name the decisions still apply but nothing is persisted'
   if (response.status !== 'success') return;
   assert.equal(response.memory, undefined);
   assert.match(response.message, /Set a project name/);
-  assert.equal(store.getResult('sess-3')?.dailyWorkGuidance?.plannedSteps[0]?.status, 'approved');
+  assert.equal(store.getResult('sess-3')?.dailyWorkGuidance?.plannedSteps![0]?.status, 'approved');
 });
 
 test('an unknown item id is reported as an error and nothing changes', async () => {
@@ -182,7 +185,7 @@ test('an unknown item id is reported as an error and nothing changes', async () 
 
   assert.equal(response.status, 'error');
   assert.match(response.status === 'error' ? response.message : '', /step-99/);
-  assert.equal(store.getResult('sess-4')?.dailyWorkGuidance?.plannedSteps[0]?.status, 'pending_approval');
+  assert.equal(store.getResult('sess-4')?.dailyWorkGuidance?.plannedSteps![0]?.status, 'pending_approval');
 });
 
 test('reports a clear error when Daily Work Guidance has not been generated', async () => {
@@ -307,15 +310,15 @@ test('reject/edit decisions trigger the model re-plan; revised steps return pend
 
   const stored = store.getResult('sess-ref')?.dailyWorkGuidance;
   assert.ok(stored);
-  const revised = stored.plannedSteps.find((s) => s.respondsTo === 'step-2');
+  const revised = stored.plannedSteps!.find((s) => s.respondsTo === 'step-2');
   assert.ok(revised, 'a revised step must exist');
   assert.equal(revised.status, 'pending_approval');
   // Factual sections were not rewritten.
   assert.equal(stored.yesterdaySummary, GUIDANCE.yesterdaySummary);
   assert.deepEqual(stored.progressVsSpec, GUIDANCE.progressVsSpec);
-  // The card shows the revised stage and the pending revision.
-  assert.match(response.card.html, /revised_plan_pending_approval/);
-  assert.match(response.card.html, /Revised for step-2/);
+  // The card re-renders as the lean checkpoint; the revised stage and pending
+  // revision live on the response loopStatus and the stored artifact (above).
+  assert.match(response.card.html, /Where things stand/);
 });
 
 test('the full refinement loop: reject → revise → approve revised → memory persists approved_plan', async () => {
@@ -348,7 +351,7 @@ test('the full refinement loop: reject → revise → approve revised → memory
   // ...then the user approves the revised step.
   const revisedId = store
     .getResult('sess-loop')
-    ?.dailyWorkGuidance?.plannedSteps.find((s) => s.respondsTo === 'step-2')?.id;
+    ?.dailyWorkGuidance?.plannedSteps!.find((s) => s.respondsTo === 'step-2')?.id;
   assert.ok(revisedId);
   const second = await handleApplyDecisions({
     memoryStore,
@@ -391,7 +394,7 @@ test('invalid model output keeps the safe deterministic result and reports the f
   assert.match(response.message, /refinement failed and was skipped/);
   const stored = store.getResult('sess-fail')?.dailyWorkGuidance;
   // The deterministic rejection stands; no partial model output leaked in.
-  assert.equal(stored?.plannedSteps[1]?.status, 'rejected');
+  assert.equal(stored?.plannedSteps![1]?.status, 'rejected');
   assert.equal(stored?.plannedSteps.some((s) => s.respondsTo !== undefined), false);
 });
 

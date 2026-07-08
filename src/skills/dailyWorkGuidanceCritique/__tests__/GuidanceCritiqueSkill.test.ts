@@ -14,6 +14,10 @@ import type { RequirementAlignment } from '../../requirementAlignment/index.js';
 import type { GapReport } from '../../gapReport/index.js';
 
 const GUIDANCE: DailyWorkGuidance = {
+  headline: 'Planning built; next steps queued.',
+  whatChanged: ['Built the planning stage.'],
+  nextActions: ['Open the PR.'],
+  blockersOrDecisions: [],
   loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Built planning.',
   progressVsSpec: [

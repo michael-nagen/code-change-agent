@@ -230,58 +230,10 @@ export class MockAnalysisRunner implements AnalysisRunner {
     if (request.includeDailyWorkGuidance) {
       const date = new Date().toISOString().slice(0, 10);
       result.dailyWorkGuidance = {
-        loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
-        selfCritique: {
-          issues: [
-            {
-              targetStepId: 'step-1',
-              issue: `${MOCK_TAG} Demo issue: the step had no validation check.`,
-              severity: 'medium',
-              suggestion: `${MOCK_TAG} Demo suggestion: add a concrete validation step.`,
-            },
-          ],
-          revisionApplied: true,
-          summary: `${MOCK_TAG} Demo self-review: revised the plan once before showing it.`,
-          confidence: 'medium',
-          checkedAt: new Date().toISOString(),
-        },
-        yesterdaySummary: `${MOCK_TAG} Demo summary of yesterday's work.`,
-        progressVsSpec: [
-          {
-            item: `${MOCK_TAG} Demo checklist item.`,
-            whatChanged: `${MOCK_TAG} Demo change.`,
-            newStatus: 'unclear',
-            evidence: `${MOCK_TAG} Demo evidence.`,
-            confidence: 'low',
-          },
-        ],
-        advancedChecklistItems: [],
-        blockersAndRisks: [
-          {
-            title: `${MOCK_TAG} Demo blocker.`,
-            description: `${MOCK_TAG} Demo description.`,
-            whyItMatters: `${MOCK_TAG} Demo impact.`,
-            requiredAction: `${MOCK_TAG} Replace mock runner with real engine.`,
-          },
-        ],
-        decisionsNeedingApproval: [
-          {
-            decision: `${MOCK_TAG} Demo decision.`,
-            context: `${MOCK_TAG} Demo context.`,
-            status: 'pending_approval',
-          },
-        ],
-        plannedSteps: [
-          {
-            id: 'step-1',
-            title: `${MOCK_TAG} Demo step.`,
-            whyItMatters: `${MOCK_TAG} Demo rationale.`,
-            expectedOutput: `${MOCK_TAG} Demo output.`,
-            cursorPrompt: `${MOCK_TAG} Demo prompt — do not run against real code.`,
-            validationChecklist: [`${MOCK_TAG} Demo validation.`],
-            status: 'pending_approval',
-          },
-        ],
+        headline: `${MOCK_TAG} Demo checkpoint: base analysis is in, next steps are queued.`,
+        whatChanged: [`${MOCK_TAG} Demo: wired up the base analysis pipeline.`],
+        nextActions: [`${MOCK_TAG} Demo: replace the mock runner with the real engine.`],
+        blockersOrDecisions: [`${MOCK_TAG} Demo blocker: still running on mock output.`],
         notionDailyUpdate: {
           yesterday: `${MOCK_TAG} Demo yesterday.`,
           today: `${MOCK_TAG} Demo today.`,

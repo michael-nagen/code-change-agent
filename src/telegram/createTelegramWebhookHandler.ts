@@ -8,8 +8,17 @@ import type { MemoryStore } from '../memory/index.js';
 import { HttpTelegramApi, type TelegramFetch } from './HttpTelegramApi.js';
 import { TelegramCommandService } from './TelegramCommandService.js';
 import { handleTelegramWebhook } from './handleTelegramWebhook.js';
+import { InMemoryTelegramArtifactRegistry } from './TelegramArtifactRegistry.js';
+import type { IntentRouter } from './IntentRouter.js';
 import type { TelegramWorkflowBridge } from './TelegramWorkflowBridge.js';
-import type { TelegramApi, TelegramConfig, TelegramStateStore, TelegramWebhookResult } from './types.js';
+import type { VideoLibraryService } from '../videos/index.js';
+import type {
+  TelegramApi,
+  TelegramArtifactRegistry,
+  TelegramConfig,
+  TelegramStateStore,
+  TelegramWebhookResult,
+} from './types.js';
 
 export interface TelegramWebhookHandler {
   handle(input: { update: unknown; secretHeader?: string }): Promise<TelegramWebhookResult>;
@@ -21,6 +30,9 @@ export function createTelegramWebhookHandler({
   userId,
   bridge,
   stateStore,
+  intentRouter,
+  videoLibrary,
+  registry,
   api,
   fetchImpl,
 }: {
@@ -31,6 +43,12 @@ export function createTelegramWebhookHandler({
   bridge?: TelegramWorkflowBridge;
   /** Per-chat control state store. Defaults to an in-memory one. */
   stateStore?: TelegramStateStore;
+  /** Routes free-text messages to a command. Defaults to heuristic-only. */
+  intentRouter?: IntentRouter;
+  /** Daily AI Video library; wire the file-backed one for durability. */
+  videoLibrary?: VideoLibraryService;
+  /** Maps sent message ids → artifacts for reply-to-edit. Defaults in-memory. */
+  registry?: TelegramArtifactRegistry;
   /** Provide a custom API (tests). Defaults to the real HTTP Telegram client. */
   api?: TelegramApi;
   fetchImpl?: TelegramFetch;
@@ -41,6 +59,8 @@ export function createTelegramWebhookHandler({
     ...(userId !== undefined ? { userId } : {}),
     ...(bridge !== undefined ? { bridge } : {}),
     ...(stateStore !== undefined ? { stateStore } : {}),
+    ...(intentRouter !== undefined ? { intentRouter } : {}),
+    ...(videoLibrary !== undefined ? { videoLibrary } : {}),
   });
   const telegramApi =
     api ??
@@ -48,6 +68,7 @@ export function createTelegramWebhookHandler({
       botToken: config.botToken,
       ...(fetchImpl !== undefined ? { fetchImpl } : {}),
     });
+  const artifactRegistry = registry ?? new InMemoryTelegramArtifactRegistry();
 
   return {
     handle({ update, secretHeader }) {
@@ -56,6 +77,7 @@ export function createTelegramWebhookHandler({
         config,
         service,
         api: telegramApi,
+        registry: artifactRegistry,
         ...(secretHeader !== undefined ? { secretHeader } : {}),
       });
     },

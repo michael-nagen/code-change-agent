@@ -25,6 +25,7 @@ import type {
   ClearProjectMemoryInput,
   GetProjectMemoryInput,
   GetUserMemoryInput,
+  ListProjectIdsInput,
   MemoryStore,
   SaveProjectMemoryInput,
   SaveUserMemoryInput,
@@ -143,6 +144,16 @@ export class DbMemoryStore implements MemoryStore {
       text: 'DELETE FROM project_memory WHERE user_id = $1 AND project_id = $2',
       params: [userId, projectId],
     });
+  }
+
+  async listProjectIds({ userId }: ListProjectIdsInput): Promise<string[]> {
+    const client = await this.ready();
+    const rows = await this.run<{ project_id: string }>({
+      client,
+      text: 'SELECT project_id FROM project_memory WHERE user_id = $1 ORDER BY updated_at DESC',
+      params: [userId],
+    });
+    return rows.map((row) => row.project_id);
   }
 
   /** Resolve the client (once) and ensure the schema exists (once) before use. */

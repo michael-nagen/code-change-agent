@@ -19,4 +19,5 @@ export type {
   GetProjectMemoryInput,
   SaveProjectMemoryInput,
   ClearProjectMemoryInput,
+  ListProjectIdsInput,
 } from './store.js';

@@ -70,9 +70,9 @@ export function applyGuidanceDecisions({
   }
 
   const next = structuredClone(guidance) as DailyWorkGuidance;
-  const stepById = new Map(next.plannedSteps.map((step) => [step.id, step]));
+  const stepById = new Map((next.plannedSteps ?? []).map((step) => [step.id, step]));
   const decisionById = new Map(
-    next.decisionsNeedingApproval.map((entry, index) => [decisionItemId(index), entry]),
+    (next.decisionsNeedingApproval ?? []).map((entry, index) => [decisionItemId(index), entry]),
   );
 
   for (const decision of decisions) {
@@ -144,7 +144,7 @@ function applyToDecision({
 
 /** Steps the user has accepted into the active plan (approved or edited). */
 function activeSteps(guidance: DailyWorkGuidance): PlannedStep[] {
-  return guidance.plannedSteps.filter(
+  return (guidance.plannedSteps ?? []).filter(
     (step) => step.status === 'approved' || step.status === 'edited',
   );
 }
@@ -157,7 +157,7 @@ function activeSteps(guidance: DailyWorkGuidance): PlannedStep[] {
  */
 export function recomputeStatusDerivedSections(guidance: DailyWorkGuidance): void {
   const active = activeSteps(guidance);
-  const pendingDecisions = guidance.decisionsNeedingApproval.filter(
+  const pendingDecisions = (guidance.decisionsNeedingApproval ?? []).filter(
     (entry) => entry.status === 'pending_approval',
   );
 
@@ -207,11 +207,11 @@ function decisionLines(guidance: DailyWorkGuidance): string[] {
             : 'Deferred';
     return `${label}: ${text}${note !== undefined ? ` — ${note}` : ''}`;
   };
-  for (const step of guidance.plannedSteps) {
+  for (const step of guidance.plannedSteps ?? []) {
     const line = describe(step.status, `${step.id}: ${step.title}`, step.note);
     if (line !== undefined) lines.push(line);
   }
-  guidance.decisionsNeedingApproval.forEach((entry, index) => {
+  (guidance.decisionsNeedingApproval ?? []).forEach((entry, index) => {
     const line = describe(entry.status, `${decisionItemId(index)}: ${entry.decision}`, entry.note);
     if (line !== undefined) lines.push(line);
   });
@@ -221,8 +221,8 @@ function decisionLines(guidance: DailyWorkGuidance): string[] {
 /** Whether any planned step or open decision still awaits the user. */
 export function hasPendingItems(guidance: DailyWorkGuidance): boolean {
   return (
-    guidance.plannedSteps.some((step) => step.status === 'pending_approval') ||
-    guidance.decisionsNeedingApproval.some((entry) => entry.status === 'pending_approval')
+    (guidance.plannedSteps ?? []).some((step) => step.status === 'pending_approval') ||
+    (guidance.decisionsNeedingApproval ?? []).some((entry) => entry.status === 'pending_approval')
   );
 }
 
@@ -240,9 +240,9 @@ function advanceLoopStatus({
   guidance: DailyWorkGuidance;
   decidedAt: string;
 }): void {
-  const lastRevisionSummary = guidance.loopStatus.lastRevisionSummary;
+  const lastRevisionSummary = guidance.loopStatus?.lastRevisionSummary;
   const pendingStage =
-    guidance.loopStatus.currentStage === 'revised_plan_pending_approval'
+    guidance.loopStatus?.currentStage === 'revised_plan_pending_approval'
       ? 'revised_plan_pending_approval'
       : 'planning';
 

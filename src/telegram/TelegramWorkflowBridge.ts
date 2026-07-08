@@ -31,6 +31,7 @@ import type {
 } from '../ui/types.js';
 import type { FetchLike } from '../ui/normalizeInput.js';
 import type { NotionWriteBackService, NotionWriteBackSource } from '../notion/index.js';
+import type { ArtifactTextEditSkill } from '../skills/artifactTextEdit/index.js';
 import type { TelegramArtifactKind, TelegramSaveSource } from './types.js';
 
 /** Configured default sources Telegram can fall back to (never invents inputs). */
@@ -64,6 +65,21 @@ export type TelegramGenerationResult =
   | { status: 'missing_input'; message: string }
   | { status: 'error'; message: string };
 
+/** A request to revise an already-rendered artifact from a Telegram reply. */
+export interface TelegramEditRequest {
+  artifact: TelegramArtifactKind;
+  /** The FULL rendered text of the artifact being edited. */
+  originalText: string;
+  /** The user's freeform edit request, e.g. "make it shorter". */
+  instruction: string;
+  projectName?: string;
+}
+
+/** The outcome of a Telegram reply-to-edit request. */
+export type TelegramEditResult =
+  | { status: 'success'; text: string; changeSummary: string }
+  | { status: 'error'; message: string };
+
 /** The Telegram → workflow adapter surface used by the command service. */
 export interface TelegramWorkflowBridge {
   /** Whether generation is wired on this deployment (a runner is configured). */
@@ -88,7 +104,23 @@ export interface TelegramWorkflowBridge {
     projectName?: string;
     pageIdOrUrl?: string;
   }): Promise<WriteNotionResponse>;
+  /**
+   * Revise an already-rendered artifact per a freeform instruction (the
+   * reply-to-edit flow). Optional so existing bridges/fakes stay valid; absent →
+   * the command reports editing is unavailable. Delegates to the shared
+   * text-edit skill and adds no reasoning of its own.
+   */
+  editArtifactText?(input: TelegramEditRequest): Promise<TelegramEditResult>;
 }
+
+/** Product-facing labels used when asking the edit skill to revise an artifact. */
+const ARTIFACT_LABELS: Record<TelegramArtifactKind, string> = {
+  analyze: 'analysis summary',
+  daily: 'Daily Work Guidance',
+  technical: 'Technical Change Brief',
+  demo: 'Demo Prep',
+  weekly: 'Weekly Review',
+};
 
 /** The optional-artifact include flags for one generation request. */
 type IncludeFlags = Record<string, boolean>;
@@ -110,6 +142,7 @@ export class DefaultTelegramWorkflowBridge implements TelegramWorkflowBridge {
   private readonly fetchImpl: FetchLike | undefined;
   private readonly defaults: TelegramSourceDefaults;
   private readonly notionWriteBack: NotionWriteBackService | undefined;
+  private readonly artifactTextEditSkill: ArtifactTextEditSkill | undefined;
 
   constructor({
     runner,
@@ -119,6 +152,7 @@ export class DefaultTelegramWorkflowBridge implements TelegramWorkflowBridge {
     fetchImpl,
     defaults,
     notionWriteBack,
+    artifactTextEditSkill,
   }: {
     runner: AnalysisRunner;
     mode: UiMode;
@@ -129,6 +163,8 @@ export class DefaultTelegramWorkflowBridge implements TelegramWorkflowBridge {
     defaults?: TelegramSourceDefaults;
     /** Explicit Notion write-back; absent → `/notion …` reports unavailable. */
     notionWriteBack?: NotionWriteBackService;
+    /** Shared text-edit skill; absent → reply-to-edit reports unavailable. */
+    artifactTextEditSkill?: ArtifactTextEditSkill;
   }) {
     this.runner = runner;
     this.mode = mode;
@@ -137,6 +173,7 @@ export class DefaultTelegramWorkflowBridge implements TelegramWorkflowBridge {
     this.fetchImpl = fetchImpl;
     this.defaults = defaults ?? {};
     this.notionWriteBack = notionWriteBack;
+    this.artifactTextEditSkill = artifactTextEditSkill;
   }
 
   async generate(request: TelegramGenerationRequest): Promise<TelegramGenerationResult> {
@@ -242,6 +279,37 @@ export class DefaultTelegramWorkflowBridge implements TelegramWorkflowBridge {
         ...(pageIdOrUrl !== undefined ? { pageIdOrUrl } : {}),
       },
     });
+  }
+
+  /**
+   * Revise an already-rendered artifact per a freeform instruction. Delegates to
+   * the injected text-edit skill (the ONE place edit reasoning lives) and maps a
+   * skill failure to a friendly error — it adds no reasoning of its own.
+   */
+  async editArtifactText({
+    artifact,
+    originalText,
+    instruction,
+    projectName,
+  }: TelegramEditRequest): Promise<TelegramEditResult> {
+    if (this.artifactTextEditSkill === undefined) {
+      return {
+        status: 'error',
+        message:
+          'Editing is not configured on this deployment. Set UI_MODE=real with OPENAI_API_KEY (or run in mock mode) to enable reply-to-edit.',
+      };
+    }
+    try {
+      const result = await this.artifactTextEditSkill.execute({
+        artifactLabel: ARTIFACT_LABELS[artifact],
+        originalText,
+        instruction,
+        ...(projectName !== undefined ? { projectLabel: projectName } : {}),
+      });
+      return { status: 'success', text: result.text, changeSummary: result.changeSummary };
+    } catch (error) {
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   /**

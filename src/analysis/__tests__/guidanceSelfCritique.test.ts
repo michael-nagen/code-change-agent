@@ -39,6 +39,10 @@ const GAP_REPORT: GapReport = {
 
 function guidance(): DailyWorkGuidance {
   return {
+    headline: 'Planning built; next steps queued.',
+    whatChanged: ['Built the planning stage.'],
+    nextActions: ['Open the PR.'],
+    blockersOrDecisions: [],
     loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
     yesterdaySummary: 'Built planning.',
     progressVsSpec: [
@@ -163,7 +167,7 @@ test('a blocker-mismatch critique revises the plan; revised steps are pending wi
   });
 
   assert.deepEqual(
-    updated.plannedSteps.map((s) => `${s.id}:${s.title}:${s.status}`),
+    updated.plannedSteps!.map((s) => `${s.id}:${s.title}:${s.status}`),
     [
       'step-1:Write planner tests:pending_approval',
       'step-2:Open the PR:pending_approval',
@@ -354,16 +358,16 @@ test('the critic may reframe or add open decisions; they return pending and stay
     checkedAt: CHECKED_AT,
   });
 
-  assert.equal(revised.decisionsNeedingApproval.length, 2);
-  assert.ok(revised.decisionsNeedingApproval.every((d) => d.status === 'pending_approval'));
+  assert.equal(revised.decisionsNeedingApproval!.length, 2);
+  assert.ok(revised.decisionsNeedingApproval!.every((d) => d.status === 'pending_approval'));
   // The reframed decisions remain addressable through the decision loop.
   const decided = applyGuidanceDecisions({
     guidance: revised,
     decisions: [{ itemId: decisionItemId(1), action: 'approve' }],
     decidedAt: '2026-07-07T13:00:00.000Z',
   }).guidance;
-  assert.equal(decided.decisionsNeedingApproval[1]?.status, 'approved');
-  assert.equal(decided.decisionsNeedingApproval[0]?.status, 'pending_approval');
+  assert.equal(decided.decisionsNeedingApproval![1]?.status, 'approved');
+  assert.equal(decided.decisionsNeedingApproval![0]?.status, 'pending_approval');
 });
 
 test('a revision that omits decisions preserves the original open decisions', () => {
@@ -374,7 +378,7 @@ test('a revision that omits decisions preserves the original open decisions', ()
     checkedAt: CHECKED_AT,
   });
 
-  assert.deepEqual(revised.decisionsNeedingApproval, original.decisionsNeedingApproval);
+  assert.deepEqual(revised.decisionsNeedingApproval!, original.decisionsNeedingApproval);
 });
 
 test('the critic cannot remove open approval points (fails closed, original kept)', async () => {
@@ -443,7 +447,7 @@ test('the critiqued plan flows into the existing decision loop unchanged in beha
     decidedAt: '2026-07-07T13:00:00.000Z',
   }).guidance;
 
-  assert.equal(decided.loopStatus.currentStage, 'approved_plan');
+  assert.equal(decided.loopStatus!.currentStage, 'approved_plan');
   assert.deepEqual(decided.memoryUpdate.nextActions, ['Write planner tests']);
   assert.equal(decided.selfCritique?.revisionApplied, true);
 });

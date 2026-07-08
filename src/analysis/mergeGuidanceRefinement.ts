@@ -39,7 +39,7 @@ export function mergeGuidanceRefinement({
   const next = structuredClone(decided) as DailyWorkGuidance;
 
   const revisableIds = new Set(
-    next.plannedSteps
+    (next.plannedSteps ?? [])
       .filter((step) => step.status === 'rejected' || step.status === 'edited')
       .map((step) => step.id),
   );
@@ -52,7 +52,7 @@ export function mergeGuidanceRefinement({
     }
   }
 
-  const usedIds = new Set(next.plannedSteps.map((step) => step.id));
+  const usedIds = new Set((next.plannedSteps ?? []).map((step) => step.id));
   const revisedByTarget = new Map(
     refinement.revisedSteps.map((revised) => [revised.respondsTo, revised]),
   );
@@ -71,7 +71,7 @@ export function mergeGuidanceRefinement({
   });
 
   const merged: PlannedStep[] = [];
-  for (const step of next.plannedSteps) {
+  for (const step of next.plannedSteps ?? []) {
     const revision = step.status === 'edited' ? revisedByTarget.get(step.id) : undefined;
     if (revision !== undefined) {
       // The user's edit asked for a re-plan; the revision supersedes it in

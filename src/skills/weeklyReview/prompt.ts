@@ -72,12 +72,21 @@ export function buildPrompt(input: WeeklyReviewInput): string {
 
   const connectedSourceSection = renderConnectedSourceContextSection(input.connectedSourceContext);
 
-  return `You are a Developer Work Companion writing a WEEKLY REVIEW: the central synthesis of the week that can seed a status update, a demo narrative, a video script, and a manager review. Use only the inputs below.
+  return `You are a Developer Work Companion writing a SHORT, mentor/manager-ready WEEKLY REVIEW: a clean update ready to send, not a full dump of the system. Use only the inputs below.
 
 ${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
+WHAT THIS IS:
+- A sharp weekly update focused on: what shipped, what was verified, what is still a risk/gap, what is next, and the single strongest demo/mentor sentence.
+
+WHAT THIS IS NOT:
+- NOT a re-enumeration of every technical detail. Do NOT restate the whole Technical Change Brief or the whole Demo Prep Loop. SYNTHESIZE across them.
+
 GUIDING PRINCIPLES:
 - SYNTHESIZE; do not merely restate one artifact. Roles: TECHNICAL CHANGE BRIEF → "What Changed Technically"; DEMO PREP LOOP → the "Demo / Video Story" (strongest story, what to show vs say, structure, key files/screens, product sentence); DAILY WORK GUIDANCE → daily progress and next steps; PREVIOUS PROGRESS MEMORY → what was already done, decisions, blockers, and next actions across earlier runs.
+- Keep it CONCISE and high-signal. Prefer fewer strong items over many weak ones; one sentence per item. Keep each list to roughly the 3–5 most important items and drop trivial ones. executiveSummary is at most ~3 sentences.
+- Be precise about proof: state what was actually VERIFIED (and how) versus what is only claimed or MOCKED; do not overclaim features.
+- suggestedWeeklyUpdate is the MOST IMPORTANT output — it is what gets sent to Notion/Telegram. Make it the highest-quality, send-ready text: concrete, synthesized, and free of filler.
 - The CURRENT run's explicit inputs (diff, spec, this-run artifacts) are the SOURCE OF TRUTH. Memory is supporting context only and must never override them. If memory conflicts with the current spec/diff, SURFACE the conflict (in the relevant item's notes or as a blocker with status "needs_review") rather than silently merging.
 - Record every unavailable input in status.missingInputs and lower the affected confidence. If the demo prep loop is missing, still produce a demo/video story but keep it lower-confidence.
 - Never invent file paths. Tag each technical item evidence "confirmed" or "inferred"; only list real, evidenced paths under importantFilesOrModules and keyFilesOrScreens.

@@ -14,6 +14,18 @@ import { MockNotionConnector } from '../../sources/index.js';
 const CHAT = 1;
 const CONFIG: TelegramConfig = { botToken: 'unit-token', allowedChatIds: ['1'], defaultProject: 'demo' };
 
+/** Run a slash command line through the service and join the reply text. */
+async function run(
+  svc: TelegramCommandService,
+  command: string,
+  argsText = '',
+  chatId: number | string = CHAT,
+): Promise<string> {
+  const line = argsText === '' ? `/${command}` : `/${command} ${argsText}`;
+  const reply = await svc.handleMessage({ text: line, chatId });
+  return reply.messages.map((m) => m.text).join('\n');
+}
+
 function makeService({
   connector,
   memoryStore = new InMemoryMemoryStore(),
@@ -46,24 +58,24 @@ function makeService({
 
 test('/notion with no subcommand shows usage', async () => {
   const { svc } = makeService();
-  const reply = await svc.run({ command: 'notion', argsText: '', chatId: CHAT });
+  const reply = await run(svc, 'notion', '');
   assert.match(reply, /Usage: \/notion daily \| weekly \| demo \| memory/);
 });
 
 test('/notion daily before generating returns a clear "no artifact" message', async () => {
   const { svc, connector } = makeService();
-  const reply = await svc.run({ command: 'notion', argsText: 'daily', chatId: CHAT });
+  const reply = await run(svc, 'notion', 'daily');
   assert.match(reply, /No daily artifact yet/i);
   assert.equal(connector.appended.length, 0);
 });
 
 test('/daily then /notion daily sends the artifact to Notion explicitly', async () => {
   const { svc, connector } = makeService();
-  await svc.run({ command: 'daily', argsText: 'spec: build it diff: +line', chatId: CHAT });
+  await run(svc, 'daily', 'spec: build it diff: +line');
   // Generation alone writes nothing to Notion.
   assert.equal(connector.appended.length, 0);
 
-  const reply = await svc.run({ command: 'notion', argsText: 'daily', chatId: CHAT });
+  const reply = await run(svc, 'notion', 'daily');
   assert.equal(reply, 'Sent to Notion.');
   assert.ok(connector.appended.length >= 1);
   assert.ok(connector.appended[0]!.content.includes('Daily Work Guidance'));
@@ -71,28 +83,28 @@ test('/daily then /notion daily sends the artifact to Notion explicitly', async 
 
 test('/send-notion is accepted as an alias', async () => {
   const { svc } = makeService();
-  await svc.run({ command: 'weekly', argsText: 'spec: build it diff: +line', chatId: CHAT });
-  const reply = await svc.run({ command: 'send-notion', argsText: 'weekly', chatId: CHAT });
+  await run(svc, 'weekly', 'spec: build it diff: +line');
+  const reply = await run(svc, 'send-notion', 'weekly');
   assert.equal(reply, 'Sent to Notion.');
 });
 
 test('/notion memory without saved memory returns a clear error', async () => {
   const { svc } = makeService();
-  const reply = await svc.run({ command: 'notion', argsText: 'memory', chatId: CHAT });
+  const reply = await run(svc, 'notion', 'memory');
   assert.match(reply, /No saved project memory/i);
 });
 
 test('/notion reports unavailable when write-back is not wired', async () => {
   const { svc, connector } = makeService({ withWriteBack: false });
-  await svc.run({ command: 'daily', argsText: 'spec: build it diff: +line', chatId: CHAT });
-  const reply = await svc.run({ command: 'notion', argsText: 'daily', chatId: CHAT });
+  await run(svc, 'daily', 'spec: build it diff: +line');
+  const reply = await run(svc, 'notion', 'daily');
   assert.match(reply, /not configured/i);
   assert.equal(connector.appended.length, 0);
 });
 
 test('/notion replies never contain the bot token', async () => {
   const { svc } = makeService();
-  await svc.run({ command: 'daily', argsText: 'spec: s diff: +d', chatId: CHAT });
-  const reply = await svc.run({ command: 'notion', argsText: 'daily', chatId: CHAT });
+  await run(svc, 'daily', 'spec: s diff: +d');
+  const reply = await run(svc, 'notion', 'daily');
   assert.ok(!reply.includes(CONFIG.botToken));
 });

@@ -45,26 +45,21 @@ export function formatDailyGuidance({
   guidance: DailyWorkGuidance;
   mode: UiMode;
 }): string {
-  const lines: string[] = [`Daily Work Guidance — ${projectLabel}`, '', guidance.yesterdaySummary];
+  const lines: string[] = [`Daily Work Checkpoint — ${projectLabel}`, '', guidance.headline];
 
-  if (guidance.plannedSteps.length > 0) {
-    lines.push('', 'Planned steps (pending your approval):');
-    lines.push(...capped(guidance.plannedSteps, 6, (s) => `• ${s.title}`));
+  if (guidance.whatChanged.length > 0) {
+    lines.push('', 'What we did:');
+    lines.push(...capped(guidance.whatChanged, 6, (s) => `• ${s}`));
   }
 
-  if (guidance.blockersAndRisks.length > 0) {
-    lines.push('', 'Blockers / risks:');
-    lines.push(...capped(guidance.blockersAndRisks, 5, (b) => `• ${b.title}`));
+  if (guidance.nextActions.length > 0) {
+    lines.push('', 'What to do next:');
+    lines.push(...capped(guidance.nextActions, 6, (s) => `• ${s}`));
   }
 
-  if (guidance.decisionsNeedingApproval.length > 0) {
-    lines.push('', 'Decisions needing approval:');
-    lines.push(...capped(guidance.decisionsNeedingApproval, 5, (d) => `• ${d.decision}`));
-  }
-
-  const nextPrompt = guidance.notionDailyUpdate.nextCursorPrompt.trim();
-  if (nextPrompt !== '') {
-    lines.push('', 'Next Cursor prompt:', nextPrompt);
+  if (guidance.blockersOrDecisions.length > 0) {
+    lines.push('', 'Blockers / decisions:');
+    lines.push(...capped(guidance.blockersOrDecisions, 5, (s) => `• ${s}`));
   }
 
   lines.push('', 'Reply /save daily to store this progress in project memory.');
@@ -277,11 +272,14 @@ export function formatHelp(): string {
     '/start — what this bot does',
     '/help — this list',
     '/status [project] — latest summary, progress, blockers, next actions',
+    '/summary [project] — short high-level summary',
+    '/projects — list projects with saved memory',
+    '/project [name] — show or set the active project',
+    '/latest — re-show the last generated artifact',
     '/memory [project] — compact memory snapshot',
     '/next — next actions only',
     '/blockers — open blockers/risks',
     '/preferences — your saved prompt/working preferences',
-    '/project [name] — show or set the active project',
     '/analyze [project] [spec: … diff: …] — run/reuse analysis',
     '/daily — generate Daily Work Guidance',
     '/technical — generate Technical Change Brief',
@@ -290,6 +288,10 @@ export function formatHelp(): string {
     '/save [daily|weekly] — save the latest proposed memory update',
     '/notion daily|weekly|demo|memory — send the latest artifact to Notion (explicit)',
     '/clear [confirm] — clear project memory (confirmation required)',
+    '/edit — how to edit a result (reply to it with your change)',
+    '',
+    'You can also just describe what you want in plain language.',
+    'To tweak a result, reply to it, e.g. "make it shorter" or "translate to Hebrew".',
   ].join('\n');
 }
 

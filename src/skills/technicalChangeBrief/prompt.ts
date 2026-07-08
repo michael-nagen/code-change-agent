@@ -54,12 +54,14 @@ export function buildPrompt(input: TechnicalChangeBriefInput): string {
 ${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 WHAT THIS IS:
-- A technical explanation of the ACTUAL implementation: schema/model/API/workflow/UI changes, the most interesting functionality, an end-to-end flow, the files worth showing, and talking points.
+- ONLY the technical explanation of the code: what changed in the code, where it is implemented, how the flow works, which files matter, how we prove it works, and what architectural decisions/tradeoffs matter. Cover code structure, architecture, files, flow, tests/checks, and technical risks/tradeoffs.
 
 WHAT THIS IS NOT:
+- NOT a demo/video script. Do NOT include a product pitch, narration, speaker notes, click/step order, or a generic demo story — that belongs in the Demo Prep Loop. (Technical Brief = how it is built in code; Demo Prep = how to present it.)
 - NOT a PR description (do not duplicate that artifact).
 - NOT a reviewer-question generator. Do NOT focus on questions a reviewer might ask.
 - NOT a rewrite of the requirement. Focus on what changed and why it matters.
+- talkingPoints are terse TECHNICAL points a reviewer would care about (design decisions, tradeoffs, where to look) — not a pitch or a demo narration.
 
 GROUNDING & HONESTY RULES:
 - The RAW DIFF below is the source of truth for concrete details (files, fields, flags). Reason from it plus the analysis artifacts.
@@ -121,7 +123,7 @@ Return ONLY a valid JSON object — no markdown fences, no commentary — with t
   "talkingPoints": ["Concise bullet the author can say when explaining the change."]
 }
 
-Keep the tone clear, technical, practical, and not too long — focused on what changed and why it matters.${userPreferencesSection}
+Keep it short and presentation-ready for a technical reviewer: clear, technical, and practical. Prefer fewer high-signal items over long generic lists, and focus on what changed and why it matters.${userPreferencesSection}
 
 ${fenceUntrustedContent({ label: 'REQUIREMENT / SPEC', content: input.requirementText })}
 

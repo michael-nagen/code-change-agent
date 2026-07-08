@@ -36,6 +36,10 @@ export interface ClearProjectMemoryInput {
   projectId: string;
 }
 
+export interface ListProjectIdsInput {
+  userId: string;
+}
+
 export interface MemoryStore {
   getUserMemory(input: GetUserMemoryInput): Promise<UserPreferencesMemory | undefined>;
   saveUserMemory(input: SaveUserMemoryInput): Promise<void>;
@@ -44,4 +48,11 @@ export interface MemoryStore {
   saveProjectMemory(input: SaveProjectMemoryInput): Promise<void>;
 
   clearProjectMemory?(input: ClearProjectMemoryInput): Promise<void>;
+
+  /**
+   * List the project ids that have saved memory for a user. Optional so existing
+   * custom stores stay valid; callers treat an absent method as "listing not
+   * supported" rather than "no projects".
+   */
+  listProjectIds?(input: ListProjectIdsInput): Promise<string[]>;
 }

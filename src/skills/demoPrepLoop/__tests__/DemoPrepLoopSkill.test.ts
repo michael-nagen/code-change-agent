@@ -358,7 +358,8 @@ test('the prompt enforces grounding and approval-gating rules', async () => {
   assert.ok(prompt.includes('Do NOT invent files'));
   assert.ok(prompt.includes('pending_approval'));
   assert.ok(prompt.includes('capture manually'));
-  assert.ok(prompt.includes('onSlideText SHORT'));
+  assert.ok(prompt.includes('onSlideText is SHORT'));
+  assert.ok(prompt.includes('within 7 minutes'));
 });
 
 test('preserves pending approval statuses on every plan item', async () => {

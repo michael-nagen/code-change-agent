@@ -75,6 +75,54 @@ export function formatMemorySnapshot({
   ].join('\n');
 }
 
+/** The list of saved projects, with the active one flagged. */
+export function formatProjectsList({
+  projectIds,
+  activeLabel,
+}: {
+  projectIds: string[];
+  activeLabel: string | undefined;
+}): string {
+  if (projectIds.length === 0) {
+    return 'No saved projects yet. Run /analyze then /daily and /save to create project memory.';
+  }
+  const activeId = activeLabel !== undefined ? activeLabel.trim().toLowerCase() : undefined;
+  const lines = ['Saved projects:', ''];
+  for (const id of projectIds) {
+    const isActive = activeId !== undefined && id.toLowerCase() === activeId;
+    lines.push(`${isActive ? '➡️' : DOT} ${id}${isActive ? ' (active)' : ''}`);
+  }
+  lines.push('', 'Tap a project below, or send "/status <name>".');
+  return lines.join('\n');
+}
+
+/** A short, high-level summary of a project's current state. */
+export function formatProjectSummary({
+  projectLabel,
+  memory,
+}: {
+  projectLabel: string;
+  memory: ProjectMemory | undefined;
+}): string {
+  const snapshot = memory?.latestSnapshot;
+  if (memory === undefined || snapshot === undefined) {
+    return `${projectLabel}: no saved progress yet. Run /analyze then /daily to start.`;
+  }
+  const doneCount = snapshot.updatedChecklistStatuses.filter((c) => isDone(c.status)).length;
+  const total = snapshot.updatedChecklistStatuses.length;
+  const lines = [
+    `${projectLabel} — summary`,
+    '',
+    snapshot.dailySummary,
+    '',
+    `Progress: ${doneCount}/${total} checklist items done`,
+    `Blockers: ${snapshot.openBlockers.length} · Next actions: ${snapshot.nextActions.length}`,
+  ];
+  const firstNext = snapshot.nextActions[0];
+  if (firstNext !== undefined) lines.push('', `Next: ${firstNext}`);
+  return lines.join('\n');
+}
+
 function statusIcon(status: string): string {
   return isDone(status) ? CHECK : WARN;
 }

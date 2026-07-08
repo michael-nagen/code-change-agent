@@ -12,6 +12,7 @@ import type {
   ClearProjectMemoryInput,
   GetProjectMemoryInput,
   GetUserMemoryInput,
+  ListProjectIdsInput,
   MemoryStore,
   SaveProjectMemoryInput,
   SaveUserMemoryInput,
@@ -48,6 +49,14 @@ export class InMemoryMemoryStore implements MemoryStore {
 
   async clearProjectMemory({ userId, projectId }: ClearProjectMemoryInput): Promise<void> {
     this.projectMemory.delete(projectKey({ userId, projectId }));
+  }
+
+  async listProjectIds({ userId }: ListProjectIdsInput): Promise<string[]> {
+    const prefix = `${userId}\u0000`;
+    return [...this.projectMemory.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => key.slice(prefix.length))
+      .sort((a, b) => a.localeCompare(b));
   }
 }
 

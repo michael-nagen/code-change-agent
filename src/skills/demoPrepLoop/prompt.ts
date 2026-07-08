@@ -7,10 +7,10 @@ import {
 
 /**
  * Reasoning constraints encoded in the prompt:
- *  - plan the best demo/presentation of the ACTUAL change: story, walkthrough
- *    order, code evidence, manual screenshot plan, deck plan, video script,
- *    pitch, and readiness checklist — NOT a PR description and NOT a rehash of
- *    the Technical Change Brief
+ *  - build an up-to-7-minute demo/video SCRIPT for the ACTUAL change: the story,
+ *    walkthrough order, code evidence, and a light screenshot/deck plan kept
+ *    secondary — NOT a big presentation/deck generator, NOT a PR description, and
+ *    NOT a rehash of the Technical Change Brief
  *  - reason from the raw diff plus the upstream analysis artifacts; never
  *    invent files, screens, UI areas, or line numbers
  *  - mark every path as confirmed vs inferred; omit lineRange unless the exact
@@ -61,17 +61,18 @@ export function buildPrompt(input: DemoPrepLoopInput): string {
 
   const connectedSourceSection = renderConnectedSourceContextSection(input.connectedSourceContext);
 
-  return `You are a demo coach and presentation director preparing a DEMO PREP LOOP: a complete, approval-gated plan for demoing and presenting a code change. It tells the author what story to tell, what to open in which order, which screenshots to capture manually, what appears on each slide, and what to say while each slide is shown.
+  return `You are a demo coach preparing a DEMO PREP LOOP: an UP-TO-7-MINUTE demo/video SCRIPT for a code change. It tells the story of the work and selects the most important technical parts to show — what to say and what to open, in order.
 
 ${UNTRUSTED_CONTENT_SAFETY_INSTRUCTION}
 
 WHAT THIS IS:
-- A story-first demo plan: a demo story proposal, a recommended walkthrough order, a code evidence plan, a manual screenshot/slide plan, a slide-by-slide deck plan that separates what is SHOWN from what is SAID, a draft 5-7 minute video script, a 30-45 second pitch, and a demo readiness checklist.
-- A loop-style planning artifact: every major item stays pending the user's approval, and open decisions become explicit approval questions.
+- A concise, ordered demo/video script (fits within 7 minutes) built around the STORY of the work. Cover, in this order: (1) the general story — what happened, what problem was solved, what was built; (2) schema/storage changes — how the way things are saved changed; (3) new models/types; (4) interesting functionality; (5) meaningful refactors; (6) the 7-minute script order. draftVideoScript is the PRIMARY output; walkthroughOrder is the ordered "what to open and say".
+- Technical points are welcome, but only as part of the demo story — not a deep technical brief.
 
 WHAT THIS IS NOT:
+- NOT a big presentation/deck generator. Keep deckPlan and screenshotPlan SHORT (only the few visuals that genuinely help the story); do not overproduce slides and do not duplicate the same text across narration and slides.
+- NOT the Technical Change Brief. Do NOT restate it or dive into trivial implementation details — reuse its findings only to pick the most interesting things to show and say. (Demo Prep = how to present the work; Technical Brief = how the code is built.)
 - NOT a PR description (do not duplicate that artifact).
-- NOT the Technical Change Brief. Do NOT restate it — reuse its findings to pick what to show and say.
 - NOT a screenshot generator. This plan NEVER captures screenshots; every screenshot is a plan for the user to capture manually.
 
 GROUNDING & HONESTY RULES:
@@ -84,13 +85,13 @@ GROUNDING & HONESTY RULES:
 - When DAILY WORK GUIDANCE is available, use it to connect the demo to progress against the spec, what was done, open blockers, and next actions.
 
 STORYTELLING RULES:
-- Order the walkthrough for narrative impact (problem, then solution, then proof), not dependency order. A good default: data contract/types, then prompt/behavior rules, then parser/validation/fail-closed behavior, then workflow/harness integration, then UI rendering, then copy/export behavior, then tests if relevant.
-- Optimize for a clear demo story, not maximum technical detail; use whatToSkip to keep the presentation focused.
-- Keep onSlideText SHORT and visual: at most 4 bullets of roughly 6 words each. All explanation goes in speakerNotes and narrationScript; transitionToNextSlide is one connecting sentence.
+- The whole script must fit within 7 minutes. Keep it concise and ordered; every second should earn its place. Focus on what to SAY and SHOW, using the most interesting product/technical proof points.
+- Order the walkthrough for narrative impact (problem, then solution, then proof), not dependency order. A good default: the general story, then schema/storage changes, then new models/types, then the most interesting functionality, then meaningful refactors, then the proof moment.
+- Optimize for a clear demo story, not maximum technical detail; use whatToSkip to cut trivial implementation details and keep the script tight.
+- Keep the deck LIGHT: only include a slide when a visual genuinely helps. onSlideText is SHORT and visual (at most 4 bullets of ~6 words each); put explanation in narration and do NOT repeat the same wording across narrationScript, speakerNotes, and onSlideText.
 - Prefer slides that use screenshots from the screenshot plan; reference them by their "id" in screenshotIds. Every referenced id must exist in screenshotPlan.
-- The plan must be fully useful even though screenshots are captured manually.
-- The deck and video script should total roughly 5-7 minutes; the finalShortPitch should take 30-45 seconds to say out loud, usable as the video opening, a Slack update, or a project submission pitch.
-- The readiness checklist covers preparation before recording/presenting: run tests, run typecheck, open the app, prepare input, generate artifacts, capture the planned screenshots, rehearse the script, verify the copy/output flow, and have the important files ready to show.
+- draftVideoScript is the primary deliverable: its sections should carry the 7-minute story end to end. The finalShortPitch takes 30-45 seconds to say out loud, usable as the video opening, a Slack update, or a project submission pitch.
+- The readiness checklist covers preparation before recording/presenting: run tests, run typecheck, open the app, prepare input, generate artifacts, capture any planned screenshots, rehearse the script, verify the copy/output flow, and have the important files ready to show.
 
 Return ONLY a valid JSON object — no markdown fences, no commentary — with this exact shape:
 
@@ -127,7 +128,7 @@ Return ONLY a valid JSON object — no markdown fences, no commentary — with t
   ],
   "draftVideoScript": {
     "title": "...",
-    "estimatedDuration": "5-7 minutes",
+    "estimatedDuration": "up to 7 minutes",
     "sections": [
       { "kind": "opening | context_problem | implementation_walkthrough | demo_output | tradeoffs_limitations | closing", "title": "...", "narration": "...", "visualCue": "...", "estimatedTimeSeconds": 60 }
     ]
@@ -138,7 +139,7 @@ Return ONLY a valid JSON object — no markdown fences, no commentary — with t
   ]
 }
 
-Keep the tone clear, practical, and demo-focused — the author should be able to follow this plan without improvising.${userPreferencesSection}
+Keep the tone clear, practical, and demo-focused — the author should be able to record a tight sub-7-minute demo from this script without improvising, and without building a big deck.${userPreferencesSection}
 
 ${fenceUntrustedContent({ label: 'REQUIREMENT / SPEC', content: input.requirementText })}
 

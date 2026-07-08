@@ -26,7 +26,7 @@ const ACTION_OF_STATUS: Partial<Record<ApprovalStatus, string>> = {
  */
 function planDecisionsFromGuidance(guidance: DailyWorkGuidance): PlanDecisionRecord[] {
   const records: PlanDecisionRecord[] = [];
-  for (const step of guidance.plannedSteps) {
+  for (const step of guidance.plannedSteps ?? []) {
     const action = ACTION_OF_STATUS[step.status];
     if (action === undefined) continue;
     records.push({
@@ -36,7 +36,7 @@ function planDecisionsFromGuidance(guidance: DailyWorkGuidance): PlanDecisionRec
       ...(step.note !== undefined ? { note: step.note } : {}),
     });
   }
-  guidance.decisionsNeedingApproval.forEach((entry, index) => {
+  (guidance.decisionsNeedingApproval ?? []).forEach((entry, index) => {
     const action = ACTION_OF_STATUS[entry.status];
     if (action === undefined) return;
     records.push({
@@ -52,6 +52,7 @@ function planDecisionsFromGuidance(guidance: DailyWorkGuidance): PlanDecisionRec
 export function snapshotFromDailyWorkGuidance(guidance: DailyWorkGuidance): ProjectProgressSnapshot {
   const m = guidance.memoryUpdate;
   const planDecisions = planDecisionsFromGuidance(guidance);
+  const loopStage = guidance.loopStatus?.currentStage;
   return {
     date: m.date,
     dailySummary: m.dailySummary,
@@ -63,7 +64,7 @@ export function snapshotFromDailyWorkGuidance(guidance: DailyWorkGuidance): Proj
     // A run's "new decisions" are the decisions still open going forward.
     openDecisions: [...m.newDecisions],
     nextActions: [...m.nextActions],
-    loopStage: guidance.loopStatus.currentStage,
+    ...(loopStage !== undefined ? { loopStage } : {}),
     ...(planDecisions.length > 0 ? { planDecisions } : {}),
   };
 }

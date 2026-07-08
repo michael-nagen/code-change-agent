@@ -26,23 +26,17 @@ import { renderDailyWorkGuidance } from '../components/DailyWorkGuidanceView.js'
 import { renderTechnicalChangeBrief } from '../components/TechnicalChangeBriefView.js';
 import { renderDemoPrepLoop } from '../components/DemoPrepLoopView.js';
 import { renderWeeklyReview } from '../components/WeeklyReviewView.js';
-import type { DailyWorkGuidance } from '../../../../skills/dailyWorkGuidance/index.js';
 import type { TechnicalChangeBrief } from '../../../../skills/technicalChangeBrief/index.js';
 import type { DemoPrepLoop } from '../../../../skills/demoPrepLoop/index.js';
 import type { WeeklyReview } from '../../../../skills/weeklyReview/index.js';
 import { buildMarkdownDeck, buildPptxDeck } from '../../../../tools/presentation/index.js';
 import {
   prDescriptionToMarkdown,
-  dailyWorkGuidanceToMarkdown,
-  notionDailyUpdateToMarkdown,
   technicalChangeBriefToMarkdown,
   technicalChangeBriefTalkingPointsToMarkdown,
   technicalChangeBriefFilesToMarkdown,
   demoPrepLoopToMarkdown,
   demoPrepLoopWalkthroughToMarkdown,
-  demoPrepLoopScreenshotPlanToMarkdown,
-  demoPrepLoopDeckPlanToMarkdown,
-  demoPrepLoopSpeakerNotesToMarkdown,
   demoPrepLoopNarrationToMarkdown,
   weeklyReviewToMarkdown,
   weeklyReviewUpdateToMarkdown,
@@ -54,24 +48,6 @@ import {
 
 // Re-exported so the package's public surface (`./index.js`) stays unchanged.
 export { prDescriptionToMarkdown } from './copyFormatters.js';
-
-/**
- * Extra labeled copy targets for Daily Work Guidance: the Notion-ready daily
- * block, plus one per planned step's Cursor/Claude prompt. The full artifact is
- * offered via the primary `copyText`.
- */
-function dailyWorkGuidanceCopyActions(g: DailyWorkGuidance): { label: string; text: string }[] {
-  const actions = [
-    {
-      label: 'Notion daily',
-      text: notionDailyUpdateToMarkdown({ update: g.notionDailyUpdate, date: g.memoryUpdate.date }),
-    },
-  ];
-  for (const step of g.plannedSteps) {
-    actions.push({ label: `Prompt: ${step.title}`, text: step.cursorPrompt });
-  }
-  return actions;
-}
 
 /**
  * Extra labeled copy targets for the Technical Change Brief: the talking points
@@ -121,15 +97,16 @@ function weeklyReviewCopyActions(r: WeeklyReview): { label: string; text: string
   ];
 }
 
+/**
+ * Demo Prep is a 7-minute demo/video script, not a deck generator, so we keep
+ * only the script-focused copy targets. The deck stays available via the
+ * download actions (Markdown/PPTX) without being featured as copy noise.
+ */
 function demoPrepLoopCopyActions(x: DemoPrepLoop): { label: string; text: string }[] {
   return [
     { label: 'Walkthrough order', text: demoPrepLoopWalkthroughToMarkdown(x) },
-    { label: 'Screenshot plan', text: demoPrepLoopScreenshotPlanToMarkdown(x) },
-    { label: 'Deck plan', text: demoPrepLoopDeckPlanToMarkdown(x) },
-    { label: 'Speaker notes', text: demoPrepLoopSpeakerNotesToMarkdown(x) },
     { label: 'Narration script', text: demoPrepLoopNarrationToMarkdown(x) },
     { label: 'Short pitch', text: x.finalShortPitch },
-    { label: 'Markdown deck', text: demoPrepLoopDeckMarkdown(x) },
   ];
 }
 
@@ -222,12 +199,12 @@ export function renderWorkspaceCards(result: AnalysisResult): WorkspaceCard[] {
       artifact: result.dailyUpdate,
       render: renderDailyUpdate,
     }),
+    // Lean checkpoint: no per-section copy buttons. It is edited through the
+    // companion chat; the footer offers Save to memory and Send to Notion.
     makeCard({
       id: 'dailyWorkGuidance',
       artifact: result.dailyWorkGuidance,
       render: renderDailyWorkGuidance,
-      copyText: dailyWorkGuidanceToMarkdown,
-      copyActions: dailyWorkGuidanceCopyActions,
     }),
     makeCard({
       id: 'technicalChangeBrief',

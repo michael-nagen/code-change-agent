@@ -8,6 +8,10 @@ import type { AnalysisResult } from '../../analysis/index.js';
 import type { DailyWorkGuidance } from '../../skills/dailyWorkGuidance/index.js';
 
 const GUIDANCE: DailyWorkGuidance = {
+  headline: 'Planning built; next steps queued.',
+  whatChanged: ['Built the planning stage.'],
+  nextActions: ['Open the PR.'],
+  blockersOrDecisions: [],
   loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Built planning.',
   progressVsSpec: [],

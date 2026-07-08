@@ -66,6 +66,10 @@ const GAP_REPORT: GapReport = {
 };
 
 const GUIDANCE: DailyWorkGuidance = {
+  headline: 'Planning built; next steps queued.',
+  whatChanged: ['Built the planning stage.'],
+  nextActions: ['Open the PR.'],
+  blockersOrDecisions: [],
   loopStatus: { currentStage: 'planning', overallStatus: 'pending_user_review' },
   yesterdaySummary: 'Implemented the planning stage.',
   progressVsSpec: [
@@ -312,8 +316,8 @@ test('the full loop: run 1 → user decisions → saved memory → run 2 reloads
   // Run 1 proposes a plan whose items are pending the user's approval.
   const first = await run(harness, { projectId: 'demo' });
   assert.ok(first.dailyWorkGuidance);
-  assert.equal(first.dailyWorkGuidance.loopStatus.currentStage, 'planning');
-  assert.equal(first.dailyWorkGuidance.plannedSteps[0]?.status, 'pending_approval');
+  assert.equal(first.dailyWorkGuidance.loopStatus!.currentStage, 'planning');
+  assert.equal(first.dailyWorkGuidance.plannedSteps![0]?.status, 'pending_approval');
 
   // The user decides; the loop stage advances (stage N → stage N+1).
   const { guidance: decided } = applyGuidanceDecisions({
@@ -321,7 +325,7 @@ test('the full loop: run 1 → user decisions → saved memory → run 2 reloads
     decisions: [{ itemId: 'step-1', action: 'approve', note: 'Ship it' }],
     decidedAt: '2026-07-07T12:00:00.000Z',
   });
-  assert.equal(decided.loopStatus.currentStage, 'approved_plan');
+  assert.equal(decided.loopStatus!.currentStage, 'approved_plan');
 
   // The decided plan is persisted as project memory.
   await harness.saveProjectMemoryFromGuidance({ projectId: 'demo', guidance: decided });

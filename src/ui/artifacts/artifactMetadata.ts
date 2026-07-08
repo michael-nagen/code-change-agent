@@ -133,11 +133,10 @@ export const ARTIFACT_METADATA: readonly ArtifactMeta[] = [
     label: 'Daily Work Guidance',
     group: 'actions',
     description:
-      'How to work today: yesterday vs the spec, blockers, decisions, and an approvable plan.',
+      'A short work checkpoint: what changed, what to do next, and any important blockers or decisions.',
     isBaseArtifact: false,
     isGeneratedOnDemand: true,
     isEditable: false,
-    copyLabel: 'Daily Work Guidance',
     flag: 'includeDailyWorkGuidance',
     requiredDependencies: ['flowArtifact', 'gapReport'],
   },

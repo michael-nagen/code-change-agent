@@ -22,15 +22,23 @@ import {
   OpenAICompatibleLanguageModel,
   resolveConnectors,
 } from '../index.js';
-import type { MemoryStore } from '../index.js';
+import type { LanguageModel, MemoryStore } from '../index.js';
 import type { NotionConnector, GitHubConnector } from '../sources/index.js';
 import { NotionWriteBackService } from '../notion/index.js';
 import { DefaultArtifactEditSkill, type ArtifactEditSkill } from '../skills/artifactEdit/index.js';
 import {
+  DefaultArtifactTextEditSkill,
+  type ArtifactTextEditSkill,
+} from '../skills/artifactTextEdit/index.js';
+import {
   DefaultGuidanceRefinementSkill,
   type GuidanceRefinementSkill,
 } from '../skills/dailyWorkGuidanceRefinement/index.js';
-import { MockArtifactEditSkill, MockGuidanceRefinementSkill } from '../skills/mocks/index.js';
+import {
+  MockArtifactEditSkill,
+  MockArtifactTextEditSkill,
+  MockGuidanceRefinementSkill,
+} from '../skills/mocks/index.js';
 import type { AnalysisRunner, UiMode } from './types.js';
 import { HarnessAnalysisRunner, MockAnalysisRunner } from './analysisRunner.js';
 
@@ -39,6 +47,12 @@ export interface ResolvedEngine {
   runner: AnalysisRunner;
   mode: UiMode;
   artifactEditSkill: ArtifactEditSkill;
+  /**
+   * Freeform text-level artifact editing, used by Telegram's reply-to-edit flow
+   * (edits any rendered artifact by instruction). Provider-agnostic; the mock
+   * variant keeps mock mode fully functional without a model.
+   */
+  artifactTextEditSkill: ArtifactTextEditSkill;
   guidanceRefinementSkill: GuidanceRefinementSkill;
   /**
    * Explicit Notion write-back. Always present; when Notion is not configured
@@ -46,6 +60,12 @@ export interface ResolvedEngine {
    * write-back appends existing artifacts and needs no LLM provider.
    */
   notionWriteBack: NotionWriteBackService;
+  /**
+   * The resolved language model in real mode (used to build channel-side skills
+   * like Telegram's natural-language intent router). Absent in mock mode, where
+   * callers fall back to non-LLM behavior.
+   */
+  languageModel?: LanguageModel;
 }
 
 /**
@@ -116,14 +136,17 @@ export function resolveEngine(memoryStore: MemoryStore): ResolvedEngine {
       runner: new HarnessAnalysisRunner(harness),
       mode: 'real',
       artifactEditSkill: new DefaultArtifactEditSkill(model),
+      artifactTextEditSkill: new DefaultArtifactTextEditSkill(model),
       guidanceRefinementSkill: new DefaultGuidanceRefinementSkill(model),
       notionWriteBack,
+      languageModel: model,
     };
   }
   return {
     runner: new MockAnalysisRunner(),
     mode: 'mock',
     artifactEditSkill: new MockArtifactEditSkill(),
+    artifactTextEditSkill: new MockArtifactTextEditSkill(),
     guidanceRefinementSkill: new MockGuidanceRefinementSkill(),
     notionWriteBack,
   };

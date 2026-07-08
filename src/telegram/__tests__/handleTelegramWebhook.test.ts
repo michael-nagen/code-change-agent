@@ -3,10 +3,19 @@ import assert from 'node:assert/strict';
 
 import { createTelegramWebhookHandler } from '../createTelegramWebhookHandler.js';
 import { isChatAllowed } from '../handleTelegramWebhook.js';
+import { DefaultTelegramWorkflowBridge } from '../TelegramWorkflowBridge.js';
+import { MockArtifactTextEditSkill } from '../../skills/mocks/index.js';
 import { InMemoryMemoryStore } from '../../memory/index.js';
 import type { MemoryStore } from '../../memory/index.js';
+import { MockAnalysisRunner } from '../../ui/index.js';
 import type { ProjectMemory } from '../../memory/types/index.js';
-import type { TelegramApi, TelegramConfig } from '../types.js';
+import type {
+  AnswerCallbackQueryInput,
+  EditMessageTextInput,
+  SendMessageInput,
+  TelegramApi,
+  TelegramConfig,
+} from '../types.js';
 
 const PROJECT_MEMORY: ProjectMemory = {
   schemaVersion: 1,
@@ -29,8 +38,19 @@ const PROJECT_MEMORY: ProjectMemory = {
 
 class CapturingApi implements TelegramApi {
   readonly sent: Array<{ chatId: number | string; text: string }> = [];
-  async sendMessage(input: { chatId: number | string; text: string }): Promise<void> {
-    this.sent.push(input);
+  readonly edits: EditMessageTextInput[] = [];
+  readonly answered: AnswerCallbackQueryInput[] = [];
+  private nextId = 1;
+
+  async sendMessage(input: SendMessageInput): Promise<{ messageId?: number }> {
+    this.sent.push({ chatId: input.chatId, text: input.text });
+    return { messageId: this.nextId++ };
+  }
+  async editMessageText(input: EditMessageTextInput): Promise<void> {
+    this.edits.push(input);
+  }
+  async answerCallbackQuery(input: AnswerCallbackQueryInput): Promise<void> {
+    this.answered.push(input);
   }
 }
 
@@ -57,6 +77,58 @@ function setup(overrides?: {
 
 function update({ chatId, text }: { chatId: number | string; text: string }): unknown {
   return { update_id: 1, message: { message_id: 1, text, chat: { id: chatId, type: 'private' } } };
+}
+
+function replyUpdate({
+  chatId,
+  text,
+  replyToId,
+  messageId = 50,
+}: {
+  chatId: number | string;
+  text: string;
+  replyToId: number;
+  messageId?: number;
+}): unknown {
+  return {
+    update_id: 2,
+    message: {
+      message_id: messageId,
+      text,
+      chat: { id: chatId, type: 'private' },
+      reply_to_message: { message_id: replyToId },
+    },
+  };
+}
+
+/** A handler backed by the mock engine + text-edit skill (reply-to-edit works). */
+function setupWithBridge(): {
+  api: CapturingApi;
+  handler: ReturnType<typeof createTelegramWebhookHandler>;
+} {
+  const api = new CapturingApi();
+  const store = new InMemoryMemoryStore();
+  const bridge = new DefaultTelegramWorkflowBridge({
+    runner: new MockAnalysisRunner(),
+    mode: 'mock',
+    memoryStore: store,
+    artifactTextEditSkill: new MockArtifactTextEditSkill(),
+  });
+  const handler = createTelegramWebhookHandler({
+    config: BASE_CONFIG,
+    memoryStore: store,
+    bridge,
+    api,
+    userId: 'local',
+  });
+  return { api, handler };
+}
+
+function callback({ chatId, data }: { chatId: number | string; data: string }): unknown {
+  return {
+    update_id: 1,
+    callback_query: { id: 'cb-1', data, message: { message_id: 7, chat: { id: chatId, type: 'private' } } },
+  };
 }
 
 test('rejects a request with a wrong webhook secret and sends nothing', async () => {
@@ -142,6 +214,100 @@ test('a non-message update is acknowledged with no send', async () => {
   const result = await handler.handle({ update: { update_id: 5 }, secretHeader: 'secret' });
   assert.equal(result.statusCode, 200);
   assert.equal(api.sent.length, 0);
+});
+
+test('an inline-button tap is acknowledged and dispatched like a command', async () => {
+  const { api, handler } = setup();
+  const result = await handler.handle({
+    update: callback({ chatId: 42, data: '/status' }),
+    secretHeader: 'secret',
+  });
+  assert.equal(result.statusCode, 200);
+  assert.equal(api.answered.length, 1, 'the callback query must be acknowledged');
+  assert.match(api.sent[0]?.text ?? '', /DB memory landed/);
+});
+
+test('an unauthorized callback is acknowledged but never receives project data', async () => {
+  const { api, handler } = setup();
+  await handler.handle({
+    update: callback({ chatId: 999, data: '/status' }),
+    secretHeader: 'secret',
+  });
+  assert.equal(api.answered.length, 1);
+  const reply = api.sent[0]?.text ?? '';
+  assert.match(reply, /not authorized/i);
+  assert.doesNotMatch(reply, /DB memory landed/);
+});
+
+test('a slow command shows a progress message that is edited into the result', async () => {
+  const api = new CapturingApi();
+  const store = new InMemoryMemoryStore();
+  const bridge = new DefaultTelegramWorkflowBridge({
+    runner: new MockAnalysisRunner(),
+    mode: 'mock',
+    memoryStore: store,
+  });
+  const handler = createTelegramWebhookHandler({
+    config: BASE_CONFIG,
+    memoryStore: store,
+    bridge,
+    api,
+    userId: 'local',
+  });
+
+  await handler.handle({
+    update: update({ chatId: 42, text: '/analyze spec: build it diff: +line' }),
+    secretHeader: 'secret',
+  });
+
+  assert.equal(api.sent[0]?.text, '🔄 Running analysis…');
+  assert.match(api.edits[0]?.text ?? '', /Analysis ready/);
+});
+
+test('replying to a generated artifact edits it and refreshes /latest', async () => {
+  const { api, handler } = setupWithBridge();
+
+  // Generate an analysis; its result is the message we will reply to.
+  await handler.handle({
+    update: update({ chatId: 42, text: '/analyze spec: build it diff: +line' }),
+    secretHeader: 'secret',
+  });
+  // The progress message (id 1) is edited into the result and registered.
+  const artifactMessageId = 1;
+
+  await handler.handle({
+    update: replyUpdate({ chatId: 42, text: 'make it shorter', replyToId: artifactMessageId }),
+    secretHeader: 'secret',
+  });
+
+  // The edit shows a progress message that is edited into the revised result.
+  const editText = api.edits.at(-1)?.text ?? '';
+  assert.match(editText, /Edit applied to analysis summary: "make it shorter"/);
+  // The edited result carries action buttons (Edit again / Latest).
+  const markup = api.edits.at(-1)?.replyMarkup;
+  assert.equal(markup?.kind, 'inline');
+
+  // /latest now reflects the edited version.
+  await handler.handle({ update: update({ chatId: 42, text: '/latest' }), secretHeader: 'secret' });
+  assert.match(api.sent.at(-1)?.text ?? '', /Edit applied to analysis summary/);
+});
+
+test('replying to an unknown (non-artifact) message returns a friendly error', async () => {
+  const { api, handler } = setupWithBridge();
+  await handler.handle({
+    update: replyUpdate({ chatId: 42, text: 'make it shorter', replyToId: 9999 }),
+    secretHeader: 'secret',
+  });
+  assert.match(api.sent.at(-1)?.text ?? '', /can only edit results I generated/i);
+});
+
+test('a slash command sent as a reply is dispatched normally, not treated as an edit', async () => {
+  const { api, handler } = setupWithBridge();
+  await handler.handle({
+    update: replyUpdate({ chatId: 42, text: '/help', replyToId: 9999 }),
+    secretHeader: 'secret',
+  });
+  assert.match(api.sent.at(-1)?.text ?? '', /\/status/);
 });
 
 test('isChatAllowed denies everyone when the allow-list is empty', () => {
