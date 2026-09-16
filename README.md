@@ -1,5 +1,15 @@
 # Developer Work Companion
 
+> **AI-assisted developer workflow companion** — turns a code diff and a requirement into a structured understanding, a reviewable work plan, and reusable communication artifacts while keeping every consequential decision with the human.
+
+## Why it stands out
+
+- **Human-in-the-loop by design:** a model may propose and critique a plan, but only the user can approve, edit, reject, or defer its steps.
+- **Durable context:** project memory preserves progress, decisions, blockers, and next actions across sessions.
+- **Practical developer output:** progress analysis, technical briefs, demo preparation, weekly reviews, and ready-to-use follow-up prompts.
+- **Safe to demonstrate:** the complete workflow runs in deterministic mock mode without API keys; real-model use is explicitly opt-in through environment configuration.
+
+
 A Developer Work Companion that analyzes a **code change** against a **spec**,
 generates useful communication artifacts, and runs a **human-in-the-loop
 planning cycle** with durable memory. It turns "here's my diff and my
