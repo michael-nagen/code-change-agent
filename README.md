@@ -1,27 +1,15 @@
 # Developer Work Companion
 
-> **AI-assisted developer workflow companion** — turns a code diff and a requirement into a structured understanding, a reviewable work plan, and reusable communication artifacts while keeping every consequential decision with the human.
+AI-assisted developer workflow companion that turns a code diff and a requirement into a reviewable, human-approved execution plan — with durable project memory.
 
-## Why it stands out
+## What it does
 
-- **Human-in-the-loop by design:** a model may propose and critique a plan, but only the user can approve, edit, reject, or defer its steps.
-- **Durable context:** project memory preserves progress, decisions, blockers, and next actions across sessions.
-- **Practical developer output:** progress analysis, technical briefs, demo preparation, weekly reviews, and ready-to-use follow-up prompts.
-- **Safe to demonstrate:** the complete workflow runs in deterministic mock mode without API keys; real-model use is explicitly opt-in through environment configuration.
+- Explains what changed in a diff and how it maps to the requirement.
+- Produces a structured, reviewable plan and practical developer artifacts.
+- Preserves project decisions, blockers, and next actions across sessions.
+- Keeps consequential decisions with the human: nothing is approved or applied automatically.
 
 
-A Developer Work Companion that analyzes a **code change** against a **spec**,
-generates useful communication artifacts, and runs a **human-in-the-loop
-planning cycle** with durable memory. It turns "here's my diff and my
-requirement" into a source-of-truth analysis (what changed, what progressed
-against the spec, what's still risky) and then proposes a plan you review and
-steer. Every plan is self-critiqued once by the model but **only you** can
-approve, edit, reject, or defer a step. Progress is remembered across runs, so
-the next session picks up where the last one left off.
-
-Reasoning lives in LLM-backed **skills**; the harness only orchestrates them.
-Provider-free **mock** models let the whole pipeline — including the agentic
-planning loop — run with **zero configuration and no API keys**.
 
 ## Who it's for
 
